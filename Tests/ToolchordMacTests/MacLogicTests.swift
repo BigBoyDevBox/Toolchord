@@ -31,6 +31,20 @@ import ToolchordCore
         #expect(shortcut.conflictNote?.contains("Emoji") == true)
     }
 
+    @Test func quitReservationFollowsTheKeyboardLayout() {
+        let physicalA = KeyboardShortcut(keyCode: UInt16(kVK_ANSI_A), modifierFlags: [.command])
+        let physicalQ = KeyboardShortcut(keyCode: UInt16(kVK_ANSI_Q), modifierFlags: [.command])
+        // French AZERTY swaps these letters relative to the ANSI positions.
+        #expect(physicalA.validationProblem(character: "q") == .reserved("⌘Q quits apps."))
+        #expect(physicalQ.validationProblem(character: "a") == nil)
+        // US QWERTY and uppercase translations have the same reservation.
+        #expect(physicalQ.validationProblem(character: "Q") == .reserved("⌘Q quits apps."))
+        #expect(physicalA.validationProblem(character: "a") == nil)
+        // Extra modifiers remain available for a custom global shortcut.
+        let modifiedQ = KeyboardShortcut(keyCode: UInt16(kVK_ANSI_A), modifierFlags: [.command, .option])
+        #expect(modifiedQ.validationProblem(character: "q") == nil)
+    }
+
     @Test func modifierOrderFollowsApple() {
         let shortcut = KeyboardShortcut(keyCode: UInt16(kVK_Space), modifierFlags: [.command, .shift, .option, .control])
         #expect(shortcut.modifierSymbols == "⌃⌥⇧⌘")

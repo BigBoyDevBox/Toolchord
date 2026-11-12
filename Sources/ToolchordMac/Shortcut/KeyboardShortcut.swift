@@ -90,10 +90,19 @@ public struct KeyboardShortcut: Codable, Hashable, Sendable {
     }
 
     public var problem: Problem? {
+        validationProblem(character: KeyNames.asciiCapableCharacter(for: keyCode))
+    }
+
+    /// Letter reservations follow the layout used for the shortcut's label,
+    /// while Space and Tab retain their layout-independent key codes.
+    func validationProblem(character: String?) -> Problem? {
         let flags = modifierFlags
         let isFunctionKey = KeyNames.isFunctionKey(keyCode)
         if !isFunctionKey && flags.intersection([.command, .control, .option]).isEmpty {
             return .needsModifier
+        }
+        if flags == [.command], character?.lowercased() == "q" {
+            return .reserved("⌘Q quits apps.")
         }
         let space = UInt32(kVK_Space)
         switch (keyCode, flags) {
@@ -102,7 +111,6 @@ public struct KeyboardShortcut: Codable, Hashable, Sendable {
         case (space, [.control]): return .reserved("⌃Space switches input sources.")
         case (space, [.control, .option]): return .reserved("⌃⌥Space switches input sources.")
         case (UInt32(kVK_Tab), [.command]), (UInt32(kVK_Tab), [.command, .shift]): return .reserved("⌘Tab switches apps.")
-        case (UInt32(kVK_ANSI_Q), [.command]): return .reserved("⌘Q quits apps.")
         case (UInt32(kVK_ANSI_Grave), [.command]): return .reserved("⌘` switches windows.")
         default: return nil
         }

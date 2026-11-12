@@ -30,6 +30,22 @@ import Testing
         // Foundation flattens formatting inside link text; it is restored
         // from the link text's source.
         Fixture(command: "markdown.html", input: "[a *b*](x)", expected: "<p><a href=\"x\">a <em>b</em></a></p>", links: false),
+        // Foundation drops line endings from link labels; restoring the source
+        // must preserve word boundaries as well as inline formatting.
+        Fixture(command: "markdown.html", input: "[read\nmore](https://example.test)", expected: "<p><a href=\"https://example.test\">read\nmore</a></p>", links: false),
+        Fixture(command: "markdown.plaintext", input: "[read\nmore](https://example.test)", expected: "read more", links: false),
+        Fixture(command: "markdown.html", input: "[a *b*\nc](x)", expected: "<p><a href=\"x\">a <em>b</em>\nc</a></p>", links: false),
+        Fixture(command: "markdown.plaintext", input: "[a *b*\nc](x)", expected: "a b c", links: false),
+        Fixture(command: "markdown.html", input: "[read\r\nmore](https://example.test)", expected: "<p><a href=\"https://example.test\">read\nmore</a></p>", links: false),
+        Fixture(command: "markdown.plaintext", input: "[read\r\nmore](https://example.test)", expected: "read more", links: false),
+        Fixture(command: "markdown.html", input: "[α\nβ\nγ](x)", expected: "<p><a href=\"x\">α\nβ\nγ</a></p>", links: false),
+        Fixture(command: "markdown.plaintext", input: "[α\nβ\nγ](x)", expected: "α β γ", links: false),
+        Fixture(command: "markdown.html", input: "> [read\n> more](x)", expected: "<blockquote>\n<p><a href=\"x\">read\nmore</a></p>\n</blockquote>", links: false),
+        Fixture(command: "markdown.plaintext", input: "> [read\n> more](x)", expected: "> read more", links: false),
+        Fixture(command: "markdown.html", input: "- [read\n  more](x)", expected: "<ul>\n<li><a href=\"x\">read\nmore</a></li>\n</ul>", links: false),
+        Fixture(command: "markdown.plaintext", input: "- [read\n  more](x)", expected: "• read more", links: false),
+        Fixture(command: "markdown.html", input: "> - [a *b*\n>   c](x)", expected: "<blockquote>\n<ul>\n<li><a href=\"x\">a <em>b</em>\nc</a></li>\n</ul>\n</blockquote>", links: false),
+        Fixture(command: "markdown.plaintext", input: "> - [a *b*\n>   c](x)", expected: "> • a b c", links: false),
         Fixture(command: "markdown.html", input: "**[a](x)** and [`c` d](y)", expected: "<p><strong><a href=\"x\">a</a></strong> and <a href=\"y\"><code>c</code> d</a></p>", links: false),
         Fixture(command: "markdown.html", input: "[![Build](b.svg)](https://ci) [![B](i.png) text](u)", expected: "<p><a href=\"https://ci\"><img src=\"b.svg\" alt=\"Build\" /></a> <a href=\"u\"><img src=\"i.png\" alt=\"B\" /> text</a></p>", links: false),
         Fixture(command: "markdown.html", input: "**[*a* b](x)** [a &amp; \\*b\\*](y) [see https://e.com](z)", expected: "<p><strong><a href=\"x\"><em>a</em> b</a></strong> <a href=\"y\">a &amp; *b*</a> <a href=\"z\">see https://e.com</a></p>", links: false),

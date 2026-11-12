@@ -69,43 +69,76 @@ enum MarkdownDocument {
     /// Foundation drops all formatting inside link text — emphasis, code, and
     /// images, so a README badge `[![Build](b.svg)](ci)` arrives as a plain
     /// link "Build". The run's source position still spans the original
-    /// markup, so when that single-line source differs from the run's text,
+    /// markup, so when that source differs from the run's text,
     /// parse it again as inline Markdown and keep the result, inside the
-    /// outer link, if it yields the same text. Otherwise keep the flat run.
+    /// outer link, if it yields the same text. Foundation also drops line
+    /// endings inside link labels, so a recovered multiline label may add
+    /// those separators back. Source positions may include quote/list prefixes;
+    /// remove them only when the decoded text still matches. Otherwise keep
+    /// the flat run.
     static func restoreLinkFormatting(_ inline: MarkdownInline, position: AttributedString.MarkdownSourcePosition, lines: [[UInt8]]) -> [MarkdownInline]? {
-        guard position.startLine == position.endLine, position.startLine >= 1, position.startLine <= lines.count else { return nil }
-        let line = lines[position.startLine - 1]
+        guard position.startLine >= 1, position.endLine >= position.startLine, position.endLine <= lines.count else { return nil }
+        let firstLine = lines[position.startLine - 1]
+        let lastLine = lines[position.endLine - 1]
+        let multiline = position.startLine != position.endLine
         var start = position.startColumn - 1
         var end = position.endColumn
-        guard start >= 0, start < end, end <= line.count else { return nil }
+        guard start >= 0, start <= firstLine.count, end >= 0, end <= lastLine.count,
+              multiline || start < end else { return nil }
         // A code span's position excludes its backticks.
-        while start > 0, line[start - 1] == 0x60 { start -= 1 }
-        while end < line.count, line[end] == 0x60 { end += 1 }
-        let markup = line[start..<end]
-        guard !markup.elementsEqual(inline.text.utf8) else { return nil }
-        let options = AttributedString.MarkdownParsingOptions(
-            allowsExtendedAttributes: false,
-            interpretedSyntax: .inlineOnlyPreservingWhitespace,
-            failurePolicy: .returnPartiallyParsedIfPossible,
-            languageCode: nil
-        )
-        guard let parsed = try? AttributedString(markdown: String(decoding: markup, as: UTF8.self), options: options) else { return nil }
-        var restored: [MarkdownInline] = []
-        var combined = ""
-        for run in parsed.runs {
-            let text = String(parsed.characters[run.range])
-            let intent = run.inlinePresentationIntent ?? []
-            combined += text
-            restored.append(MarkdownInline(
-                text: text, link: inline.link, image: run.imageURL?.absoluteString,
-                emphasis: inline.emphasis, strong: inline.strong, strike: inline.strike,
-                code: intent.contains(.code), soft: false, hard: false, html: intent.contains(.inlineHTML),
-                linkEmphasis: intent.contains(.emphasized),
-                linkStrong: intent.contains(.stronglyEmphasized),
-                linkStrike: intent.contains(.strikethrough)
-            ))
+        while start > 0, firstLine[start - 1] == 0x60 { start -= 1 }
+        while end < lastLine.count, lastLine[end] == 0x60 { end += 1 }
+        var markup: [UInt8]
+        if multiline {
+            markup = Array(firstLine[start...])
+            for line in lines[position.startLine..<(position.endLine - 1)] {
+                markup.append(0x0A)
+                markup.append(contentsOf: line)
+            }
+            markup.append(0x0A)
+            markup.append(contentsOf: lastLine[..<end])
+        } else {
+            markup = Array(firstLine[start..<end])
         }
-        return combined == inline.text ? restored : nil
+        func restore(_ markup: [UInt8]) -> [MarkdownInline]? {
+            guard !markup.elementsEqual(inline.text.utf8) else { return nil }
+            let options = AttributedString.MarkdownParsingOptions(
+                allowsExtendedAttributes: false,
+                interpretedSyntax: .inlineOnlyPreservingWhitespace,
+                failurePolicy: .returnPartiallyParsedIfPossible,
+                languageCode: nil
+            )
+            guard let parsed = try? AttributedString(markdown: String(decoding: markup, as: UTF8.self), options: options) else { return nil }
+            var restored: [MarkdownInline] = []
+            var combined = ""
+            for run in parsed.runs {
+                let text = String(parsed.characters[run.range])
+                let intent = run.inlinePresentationIntent ?? []
+                combined += text
+                restored.append(MarkdownInline(
+                    text: text, link: inline.link, image: run.imageURL?.absoluteString,
+                    emphasis: inline.emphasis, strong: inline.strong, strike: inline.strike,
+                    code: intent.contains(.code), soft: intent.contains(.softBreak), hard: intent.contains(.lineBreak), html: intent.contains(.inlineHTML),
+                    linkEmphasis: intent.contains(.emphasized),
+                    linkStrong: intent.contains(.stronglyEmphasized),
+                    linkStrike: intent.contains(.strikethrough)
+                ))
+            }
+            let restoresLineEndings = multiline && combined.replacingOccurrences(of: "\n", with: "") == inline.text
+            return combined == inline.text || restoresLineEndings ? restored : nil
+        }
+        if let restored = restore(markup) { return restored }
+        guard multiline else { return nil }
+        // Source spans inside block quotes/lists include continuation prefixes.
+        // Try removing only their ASCII prefix characters, retaining this
+        // candidate only when the same decoded-text safeguard succeeds.
+        var unprefixed: [UInt8] = []
+        for (index, line) in markup.split(separator: 0x0A, omittingEmptySubsequences: false).enumerated() {
+            if index > 0 { unprefixed.append(0x0A) }
+            let content = index == 0 ? line : line.drop(while: { $0 == 32 || $0 == 9 || $0 == 62 })
+            unprefixed.append(contentsOf: content)
+        }
+        return unprefixed.elementsEqual(markup) ? nil : restore(unprefixed)
     }
 
     /// Foundation's parser takes quadratic time to attach source positions to
@@ -113,7 +146,8 @@ enum MarkdownDocument {
     /// them take over 3 s, against 0.35 s without positions. Above this many
     /// candidates (`://` and `@`), parse without positions: lists are then
     /// loose only when an item holds two paragraphs, table alignment comes
-    /// from Foundation, and link text keeps Foundation's flat text.
+    /// from Foundation, and link text keeps Foundation's flat text (including
+    /// its loss of separators inside multiline link labels).
     static let maxAutolinkCandidatesWithPositions = 1_000
 
     static func autolinkCandidates(in text: String, upTo limit: Int) -> Int {
