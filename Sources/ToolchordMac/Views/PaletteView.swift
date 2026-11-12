@@ -413,17 +413,25 @@ private struct ResultContent: View {
     let focus: PaletteFocus?
 
     var body: some View {
-        switch session.preview {
-        case .none:
+        // One branch for ready results and pending ones that still show the
+        // previous result, so re-evaluation updates the same views instead of
+        // replacing them (which lost the result's scroll position). New input
+        // (not an edit) gets new views, which start at the top.
+        if let shown = shownResult {
+            content(for: shown.result, dimmed: shown.dimmed)
+                .id(session.inputGeneration)
+        } else if session.preview.isPending {
+            DelayedProgress()
+        } else {
             EmptyState(symbol: "questionmark", title: "No result", message: "")
-        case .pending(let previous):
-            if let previous {
-                content(for: previous, dimmed: true)
-            } else {
-                DelayedProgress()
-            }
-        case .ready(let result):
-            content(for: result, dimmed: false)
+        }
+    }
+
+    private var shownResult: (result: ToolResult, dimmed: Bool)? {
+        switch session.preview {
+        case .ready(let result): (result, false)
+        case .pending(let previous?): (previous, true)
+        case .pending(nil), .none: nil
         }
     }
 
@@ -494,6 +502,7 @@ private struct SuccessView: View {
         ResultTextView(
             text: output.primaryText,
             syntax: output.syntax,
+            identity: command.id,
             dimmed: dimmed,
             accessibilityLabel: "Result of \(command.title)",
             focus: focus
