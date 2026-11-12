@@ -178,6 +178,9 @@ private struct CommandList: View {
                                             actions.openSelected()
                                         }
                                         .onTapGesture { session.select(id) }
+                                        .accessibilityAction {
+                                            session.select(id)
+                                        }
                                         .accessibilityAction(named: "Open") {
                                             session.select(id)
                                             actions.openSelected()
