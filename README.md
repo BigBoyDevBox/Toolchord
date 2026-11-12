@@ -1,6 +1,11 @@
 # Toolchord
 
+> [!IMPORTANT]
+> LLM disclosure: This codebase was written with substantial help from large language models: AI coding agents working from the [`AGENTS.md`](AGENTS.md) brief in this repo.
+
 Developer tools a shortcut away. Toolchord is a native macOS palette for the small jobs between edits: format an API response, decode a token, convert a timestamp, or generate an ID. Press **⌥⇧Space** over any app, press **⌘V**, read the live preview, and press **⌘↵** to copy the result and go straight back to work.
+
+**Latest release:** v<!-- version -->1.0<!-- /version --> · [Download](https://github.com/L-K-M/Toolchord/releases/latest)
 
 ![Toolchord with pasted JSON: suggested tools on the left, a syntax-colored preview on the right, and Copy JSON & Close in the footer.](docs/images/search-json.png)
 
@@ -37,6 +42,19 @@ make run
 This generates `Toolchord.xcodeproj` from `project.yml`, builds a release app into `build/DerivedData`, and opens it. To install it, use `make install`, which copies the app to `/Applications`. Local builds are ad-hoc signed; set your team in `project.yml` to sign for distribution.
 
 To work in Xcode, run `make project` and open `Toolchord.xcodeproj`.
+
+For the shared build and release entry points, install the current
+[lkm-build and lkm-release engines](https://github.com/L-K-M/release-tool)
+by running `./install.sh` in that repository, then use:
+
+```bash
+scripts/build.sh --install
+scripts/release.sh 1.0.1          # bump project.yml + README and create a local tag
+scripts/release.sh 1.0.2 --push   # also push the commit and tag to publish zip + DMG
+```
+
+The build script requires App Sandbox support from the engine. The release
+script generates the Xcode project first; nothing is published without `--push`.
 
 ## Use
 
@@ -83,4 +101,8 @@ To add a tool, follow `Sources/ToolchordCore/Tools/HashTools.swift`: declare com
 - [Research](docs/research.md): competitors, demand, the catalog decision, and macOS constraints
 - [Design review](docs/design-review.md): how the proposed mockups shaped the panel
 
-**Status:** first release implemented. Toolchord is a working name. Released into the public domain under [The Unlicense](LICENSE).
+**Status:** first release implemented. Toolchord is a working name.
+
+## License
+
+Toolchord's own code is released into the public domain under [The Unlicense](LICENSE).
