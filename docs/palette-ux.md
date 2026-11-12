@@ -94,7 +94,7 @@ The palette must float over whatever the user is doing, including full-screen Sp
 ## Clipboard output
 
 - Write only on explicit copy actions — preview never touches the board (already in the plan).
-- For secret-shaped results (decoded JWT payload, token generators), mark the item with `org.nspasteboard.ConcealedType` so clipboard managers and Universal Clipboard skip it.
+- For secret-shaped results (decoded JWT payload, token generators), mark the item with `org.nspasteboard.ConcealedType` so clipboard managers that honor the convention skip it; Universal Clipboard behavior is untested.
 - Optionally include a `public.plain-text` plus a richer type (e.g., `public.utf8-plain-text` always; no RTF needed — targets are terminals and editors).
 - After Copy & Close, the prior app still owns focus; the user's `⌘V` lands where they started. Auto-paste-back is the obvious next feature but needs Accessibility permission — list it post-release, opt-in.
 
