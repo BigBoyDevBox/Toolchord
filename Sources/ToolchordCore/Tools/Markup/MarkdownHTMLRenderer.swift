@@ -95,12 +95,16 @@ enum MarkdownHTMLRenderer {
         for e in stack.reversed() { try close(e) }
     }
 
-    static func render(_ root: MarkdownBlock, request: ToolRequest) throws -> String {
+    /// `taskMarkersAsText` keeps GitHub task markers as `[ ] ` and `[x] `
+    /// text instead of checkboxes, for conversion to plain text.
+    static func render(_ root: MarkdownBlock, request: ToolRequest, taskMarkersAsText: Bool = false) throws -> String {
         let writer = MarkupHTMLWriter(request: request)
-        func block(_ node: MarkdownBlock, tight: Bool = false, taskDrop: Int = 0) throws {
-            if request.cancellation.isCancelled { throw MarkupFailure.cancelled }
+        func checkbox(_ item: MarkdownBlock) -> Bool? { taskMarkersAsText ? nil : item.task }
+
+        /// Writes a container's opening tag, or all of a leaf block.
+        func open(_ node: MarkdownBlock, tight: Bool, taskDrop: Int) throws {
             switch node.kind {
-            case .root: for child in node.children { try block(child) }
+            case .root, .cell, .row, .headerRow: break
             case .paragraph:
                 if !tight { try writer.cr(); try writer.append("<p>") }
                 try inline(node.runs, writer: writer, drop: taskDrop)
@@ -109,22 +113,17 @@ enum MarkdownHTMLRenderer {
                 try writer.cr(); try writer.append("<h\(level)>"); try inline(node.runs, writer: writer); try writer.append("</h\(level)>\n")
             case .quote:
                 try writer.cr(); try writer.append("<blockquote>\n")
-                for child in node.children { try block(child) }
-                try writer.cr(); try writer.append("</blockquote>\n")
-            case .orderedList, .unorderedList:
-                let ordered: Bool; if case .orderedList = node.kind { ordered = true } else { ordered = false }
-                let tag = ordered ? "ol" : "ul"
+            case .orderedList:
                 var start = 1
                 if let first = node.children.first, case .item(let n) = first.kind { start = n }
-                try writer.cr(); try writer.append(ordered && start != 1 ? "<ol start=\"\(start)\">\n" : "<\(tag)>\n")
-                for child in node.children { try block(child, tight: !node.loose) }
-                try writer.append("</\(tag)>\n")
+                try writer.cr(); try writer.append(start != 1 ? "<ol start=\"\(start)\">\n" : "<ol>\n")
+            case .unorderedList:
+                try writer.cr(); try writer.append("<ul>\n")
             case .item:
                 try writer.cr(); try writer.append("<li>")
-                let checked = node.task
-                if let checked { try writer.append(checked ? "<input type=\"checkbox\" checked=\"\" disabled=\"\" /> " : "<input type=\"checkbox\" disabled=\"\" /> ") }
-                for (i, child) in node.children.enumerated() { try block(child, tight: tight, taskDrop: i == 0 && checked != nil ? 4 : 0) }
-                try writer.append("</li>\n")
+                if let checked = checkbox(node) {
+                    try writer.append(checked ? "<input type=\"checkbox\" checked=\"\" disabled=\"\" /> " : "<input type=\"checkbox\" disabled=\"\" /> ")
+                }
             case .code(let language):
                 try writer.cr(); try writer.append("<pre><code")
                 if let hint = language?.split(whereSeparator: { $0.isWhitespace }).first, !hint.isEmpty {
@@ -159,10 +158,58 @@ enum MarkdownHTMLRenderer {
                 }
                 if body { try writer.cr(); try writer.append("</tbody>"); try writer.cr() }
                 try writer.cr(); try writer.append("</table>"); try writer.cr()
-            case .cell, .row, .headerRow: break
             }
         }
-        try block(root)
+
+        /// Writes a container's closing tag.
+        func close(_ node: MarkdownBlock) throws {
+            switch node.kind {
+            case .quote: try writer.cr(); try writer.append("</blockquote>\n")
+            case .orderedList: try writer.append("</ol>\n")
+            case .unorderedList: try writer.append("</ul>\n")
+            case .item: try writer.append("</li>\n")
+            default: break
+            }
+        }
+
+        func isContainer(_ node: MarkdownBlock) -> Bool {
+            switch node.kind {
+            case .root, .quote, .orderedList, .unorderedList, .item: true
+            default: false
+            }
+        }
+
+        // An explicit stack instead of recursion: blocks nest as deep as the
+        // nesting limit, enough to overflow a background thread's stack.
+        struct Frame {
+            let node: MarkdownBlock
+            /// Whether paragraphs directly inside this block are tight.
+            let tight: Bool
+            var nextChild = 0
+        }
+        var stack = [Frame(node: root, tight: false)]
+        while let top = stack.last {
+            if request.cancellation.isCancelled { throw MarkupFailure.cancelled }
+            guard top.nextChild < top.node.children.count else {
+                try close(top.node)
+                stack.removeLast()
+                continue
+            }
+            let index = top.nextChild
+            stack[stack.count - 1].nextChild += 1
+            let child = top.node.children[index]
+            let tight: Bool
+            var taskDrop = 0
+            switch top.node.kind {
+            case .orderedList, .unorderedList: tight = !top.node.loose
+            case .item:
+                tight = top.tight
+                if index == 0, checkbox(top.node) != nil { taskDrop = 4 }
+            default: tight = false
+            }
+            try open(child, tight: tight, taskDrop: taskDrop)
+            if isContainer(child) { stack.append(Frame(node: child, tight: tight)) }
+        }
         return String(decoding: writer.bytes, as: UTF8.self)
     }
 }

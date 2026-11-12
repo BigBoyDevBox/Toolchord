@@ -212,6 +212,38 @@ import ToolchordCore
         ))
     }
 
+    private func key(_ keyCode: Int, characters: String, ignoringModifiers: String, _ flags: NSEvent.ModifierFlags = [.command]) throws -> NSEvent {
+        try #require(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: 0, context: nil,
+            characters: characters, charactersIgnoringModifiers: ignoringModifiers, isARepeat: false, keyCode: UInt16(keyCode)
+        ))
+    }
+
+    /// Follow-up review P2: Dvorak – QWERTY ⌘ types Dvorak letters but
+    /// switches to QWERTY while ⌘ is held. ANSI Comma types "w" alone and ","
+    /// with ⌘, so ⌘, must open Settings rather than close the palette.
+    @Test func dvorakQwertyCommandUsesTheCommandMapping() throws {
+        #expect(PalettePanel.shortcut(for: try key(kVK_ANSI_Comma, characters: ",", ignoringModifiers: "w")) == .settings)
+        #expect(PalettePanel.shortcut(for: try key(kVK_ANSI_V, characters: "v", ignoringModifiers: "k")) == .edit(#selector(NSText.paste(_:))))
+        // QWERTY W types "," without ⌘: ⌘W must still close, not open Settings.
+        #expect(PalettePanel.shortcut(for: try key(kVK_ANSI_W, characters: "w", ignoringModifiers: ",")) == .close)
+        #expect(PalettePanel.shortcut(for: try key(kVK_ANSI_Z, characters: "Z", ignoringModifiers: ":", [.command, .shift])) == .edit(Selector(("redo:"))))
+        // Without ⌘ the Command mapping doesn't apply.
+        #expect(PalettePanel.shortcut(for: try key(kVK_ANSI_Comma, characters: "w", ignoringModifiers: "w", [])) == nil)
+    }
+
+    /// The Command-state translation itself, with the built-in Dvorak – QWERTY ⌘
+    /// layout loaded directly (the active input source doesn't change).
+    @Test func dvorakQwertyCommandTranslation() throws {
+        let filter = [kTISPropertyInputSourceID as String: "com.apple.keylayout.DVORAK-QWERTYCMD"] as CFDictionary
+        let sources = TISCreateInputSourceList(filter, true)?.takeRetainedValue() as? [TISInputSource]
+        let layout = try #require(sources?.first, "Dvorak – QWERTY ⌘ ships with macOS")
+        #expect(KeyNames.character(for: UInt32(kVK_ANSI_Comma), commandState: false, in: layout) == "w")
+        #expect(KeyNames.character(for: UInt32(kVK_ANSI_Comma), commandState: true, in: layout) == ",")
+        #expect(KeyNames.character(for: UInt32(kVK_ANSI_Q), commandState: false, in: layout) == "'")
+        #expect(KeyNames.character(for: UInt32(kVK_ANSI_Q), commandState: true, in: layout) == "q")
+    }
+
     /// Review P2: on French AZERTY the key in the ANSI W position types "z".
     @Test func azertyCommandZIsUndoNotClose() throws {
         #expect(PalettePanel.shortcut(for: try key(kVK_ANSI_W, "z")) == .edit(Selector(("undo:"))))

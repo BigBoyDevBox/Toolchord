@@ -12,6 +12,64 @@ enum HTMLTextConverter {
     static let paragraphs: Set<String> = ["p", "h1", "h2", "h3", "h4", "h5", "h6", "pre", "listing", "blockquote", "ul", "ol", "menu", "dl", "table", "hr", "figure", "address", "fieldset", "details"]
     static let lines: Set<String> = ["article", "aside", "body", "caption", "center", "dd", "dialog", "div", "dt", "figcaption", "footer", "form", "header", "hgroup", "html", "legend", "li", "main", "nav", "option", "search", "section", "summary", "tbody", "textarea", "tfoot", "thead", "tr"]
     static let lists: Set<String> = ["ul", "ol", "menu", "dl"]
+    /// End tags of enclosing blocks: inside a hidden element they close it, as
+    /// `</p>` closes an unclosed `<span hidden>` in a browser.
+    static let enclosingEnds: Set<String> = paragraphs.union(lines).union(["td", "th"])
+    /// Start tags that end an open `p`.
+    static let closesParagraph: Set<String> = [
+        "address", "article", "aside", "blockquote", "center", "details", "dialog", "div", "dl", "fieldset",
+        "figcaption", "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hgroup", "hr",
+        "listing", "main", "menu", "nav", "ol", "p", "pre", "search", "section", "summary", "table", "ul",
+    ]
+    /// The most elements tracked inside a hidden element.
+    static let maxHiddenInner = 256
+
+    /// Whether start tag `start` implicitly ends the hidden element `hidden`
+    /// (an omitted end tag, as for `<p hidden>a<p>b`), given the elements
+    /// opened inside it.
+    static func startTagEnds(_ hidden: String, start: String, inner: [String]) -> Bool {
+        switch hidden {
+        case "p": closesParagraph.contains(start) && !inner.contains { ["button", "table", "td", "th", "caption", "template", "object"].contains($0) }
+        case "li": start == "li" && !inner.contains { lists.contains($0) }
+        case "dt", "dd": (start == "dt" || start == "dd") && !inner.contains("dl")
+        case "option": start == "option" || start == "optgroup"
+        case "tr": start == "tr" && !inner.contains("table")
+        case "td", "th": ["td", "th", "tr"].contains(start) && !inner.contains("table")
+        default: false
+        }
+    }
+
+    /// Elements that never have content or an end tag.
+    static let void: Set<String> = ["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]
+
+    /// An element the page doesn't render: the `hidden` attribute, or an
+    /// inline `display: none` (common for preheader text in email HTML).
+    static func isHiddenByAttribute(_ tag: Tag) -> Bool {
+        if tag.attributes["hidden"] != nil { return true }
+        guard let style = tag.attributes["style"] else { return false }
+        // The last `display` declaration wins; custom properties such as
+        // `--display` don't count.
+        var display: String?
+        for declaration in style.split(separator: ";") {
+            guard let colon = declaration.firstIndex(of: ":") else { continue }
+            let property = declaration[..<colon].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard property == "display" else { continue }
+            var value = declaration[declaration.index(after: colon)...].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if value.hasSuffix("!important") { value = value.dropLast("!important".count).trimmingCharacters(in: .whitespacesAndNewlines) }
+            display = value
+        }
+        return display == "none"
+    }
+
+    /// Whether a start tag opens content that isn't shown: raw text such as
+    /// `script`, a hidden container such as `template`, or an element hidden
+    /// by attribute. Void and self-closing elements open nothing.
+    static func opensHiddenContent(_ tag: Tag) -> Bool {
+        guard !tag.end else { return false }
+        if raw.contains(tag.name) || tag.name == "textarea" && isHiddenByAttribute(tag) { return true }
+        guard !void.contains(tag.name), !tag.selfClosing else { return false }
+        return hidden.contains(tag.name) || isHiddenByAttribute(tag)
+    }
     static func space(_ b: UInt8) -> Bool { b == 32 || b == 9 || b == 10 || b == 13 || b == 12 }
     static func letter(_ b: UInt8) -> Bool { (65...90).contains(b) || (97...122).contains(b) }
     static func lower(_ b: UInt8) -> UInt8 { (65...90).contains(b) ? b + 32 : b }
@@ -80,12 +138,23 @@ enum HTMLTextConverter {
     static func convert(_ text: String, writer: PlainTextWriter, request: ToolRequest) throws {
         let b = Array(text.utf8)
         var i = 0; var frames: [Frame] = []; var depth = 0
-        var hiddenName: String?; var hiddenDepth = 0; var rawName: String?
+        // The hidden element and the elements opened inside it so far. Past
+        // `maxHiddenInner` the stack overflows: only same-name nesting
+        // (`hiddenSameDepth`, always counted) decides where it ends.
+        var hiddenName: String?; var hiddenInner: [String] = []; var rawName: String?
+        var hiddenOverflow = false; var hiddenSameDepth = 0
+        // Elements hidden by attribute end where a browser would close them;
+        // hidden containers such as `template` only at their own end tag.
+        var hiddenByAttribute = false
         // `textarea` content is raw text that is shown (entities decoded, no tags).
         var rawKeepsText = false
         var preDepth = 0; var dropFirstBreak = false
         var anchor: (url: String, text: String)?
         var cell: PlainTextWriter?; var cells: [String] = []; var rowOpen = false
+        // Open tables. Rows and cells of a table nested in a cell are
+        // flattened into that cell, separated by spaces, since a cell is
+        // one line of the outer table's output.
+        var tableDepth = 0
         var rowBytes = 0
         var work = 0
         func current() -> PlainTextWriter { cell ?? writer }
@@ -186,15 +255,53 @@ enum HTMLTextConverter {
             guard let (t, next) = try tag(b, at: i, cancellation: request.cancellation) else { break }
             i = next
             if let h = hiddenName {
-                if t.name == h { if t.end { hiddenDepth -= 1 } else if !t.selfClosing { hiddenDepth += 1 } }
-                if hiddenDepth == 0 { hiddenName = nil }
-                // Raw text (including a textarea's) can't close the container.
-                if !t.end && (raw.contains(t.name) || t.name == "textarea") { rawName = t.name; rawKeepsText = false }
-                continue
+                // Implied ends need fully tracked nesting, and nothing in
+                // template, svg, or math content can close an outer element.
+                let impliedEnds = hiddenByAttribute && !hiddenOverflow && !hiddenInner.contains { ["template", "svg", "math"].contains($0) }
+                if t.end {
+                    if !hiddenOverflow, let open = hiddenInner.lastIndex(of: t.name) {
+                        hiddenSameDepth -= hiddenInner[open...].filter { $0 == h }.count
+                        hiddenInner.removeSubrange(open...)
+                        continue
+                    }
+                    if t.name == h {
+                        if hiddenSameDepth > 0 {
+                            hiddenSameDepth -= 1
+                        } else {
+                            hiddenName = nil
+                            hiddenInner = []
+                            hiddenOverflow = false
+                        }
+                        continue
+                    }
+                    // The end of an enclosing block closes the hidden element
+                    // too; the tag itself is visible markup.
+                    guard impliedEnds, enclosingEnds.contains(t.name) else { continue }
+                } else if !(impliedEnds && startTagEnds(h, start: t.name, inner: hiddenInner)) {
+                    // Raw text (including a textarea's) can't close the container.
+                    if raw.contains(t.name) || t.name == "textarea" { rawName = t.name; rawKeepsText = false }
+                    if !t.selfClosing && !void.contains(t.name) {
+                        if t.name == h { hiddenSameDepth += 1 }
+                        if hiddenInner.count < maxHiddenInner { hiddenInner.append(t.name) } else { hiddenOverflow = true }
+                    }
+                    continue
+                }
+                hiddenName = nil
+                hiddenInner = []
+                hiddenOverflow = false
+                hiddenSameDepth = 0
             }
             if !t.end, raw.contains(t.name) { rawName = t.name; continue }
-            if !t.end, hidden.contains(t.name) {
-                if !t.selfClosing { hiddenName = t.name; hiddenDepth = 1 }
+            if !t.end, t.name == "textarea", isHiddenByAttribute(t) { rawName = t.name; rawKeepsText = false; continue }
+            if !t.end, hidden.contains(t.name) || isHiddenByAttribute(t) {
+                // A hidden void element (`<img hidden>`) just disappears.
+                if !t.selfClosing && !void.contains(t.name) {
+                    hiddenName = t.name
+                    hiddenInner = []
+                    hiddenOverflow = false
+                    hiddenSameDepth = 0
+                    hiddenByAttribute = !hidden.contains(t.name)
+                }
                 continue
             }
             let nestedList = lists.contains(t.name) && frames.contains { ["li", "dd", "dt"].contains($0.name) }
@@ -205,9 +312,10 @@ enum HTMLTextConverter {
                     if let a = anchor, request.options.flag("links") { try textOut(markupLinkSuffix(text: a.text, url: a.url)) }
                     anchor = nil
                 case "pre", "listing": preDepth = max(0, preDepth - 1)
-                case "td", "th": try endCell()
-                case "tr": try endRow()
-                case "table": try endRow()
+                case "td", "th", "tr":
+                    if tableDepth > 1 { boundary(1) } else if t.name == "tr" { try endRow() } else { try endCell() }
+                case "table":
+                    if tableDepth > 1 { tableDepth -= 1; boundary(1) } else { tableDepth = 0; try endRow() }
                 default: break
                 }
                 close(t.name)
@@ -237,9 +345,11 @@ enum HTMLTextConverter {
                 let alt = (t.attributes["alt"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                 if !alt.isEmpty { try textOut("[\(alt)]") }
             case "a": anchor = (t.attributes["href"] ?? "", "")
-            case "table": break
-            case "tr": try endRow(); rowOpen = true
-            case "td", "th": try endCell(); cell = PlainTextWriter(request: request); rowOpen = true
+            case "table": tableDepth += 1
+            case "tr":
+                if tableDepth > 1 { boundary(1) } else { try endRow(); rowOpen = true }
+            case "td", "th":
+                if tableDepth > 1 { boundary(1) } else { try endCell(); cell = PlainTextWriter(request: request); rowOpen = true }
             default: break
             }
         }

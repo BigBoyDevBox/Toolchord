@@ -101,7 +101,9 @@ enum MarkdownDocument {
             markup = Array(firstLine[start..<end])
         }
         func restore(_ markup: [UInt8]) -> [MarkdownInline]? {
-            guard !markup.elementsEqual(inline.text.utf8) else { return nil }
+            // Also re-parse text with `<`: Foundation flattens inline HTML in link
+        // text to plain text, where cmark passes it through.
+        guard !markup.elementsEqual(inline.text.utf8) || markup.contains(0x3C) else { return nil }
             let options = AttributedString.MarkdownParsingOptions(
                 allowsExtendedAttributes: false,
                 interpretedSyntax: .inlineOnlyPreservingWhitespace,

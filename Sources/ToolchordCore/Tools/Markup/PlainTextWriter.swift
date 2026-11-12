@@ -92,6 +92,10 @@ final class PlainTextWriter {
 
     func beginItem(_ marker: String) throws {
         try prepare()
+        // In a table cell, where boundaries become spaces, keep items apart:
+        // `1. a 2. b`, not `1. a2.  b`.
+        if pendingSpace && lineContent { try append(" ") }
+        pendingSpace = false
         try append(String(marker.dropLast()))
         markerGap = true
         // The marker stands in for this item's indentation on its first line.
