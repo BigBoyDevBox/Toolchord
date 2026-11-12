@@ -64,6 +64,21 @@ import Testing
         Fixture(command: "html.plaintext", input: "<p>a <img hidden alt=\"x\">b <img alt=\"y\"></p>", expected: "a b [y]", links: false),
         Fixture(command: "html.plaintext", input: "<span hidden>a<span>b</span>c</span>d<p hidden=\"until-found\">e</p>f", expected: "df", links: false),
         Fixture(command: "html.plaintext", input: "<textarea hidden>secret</textarea>shown", expected: "shown", links: false),
+        // Hidden elements end where a browser closes them.
+        Fixture(command: "html.plaintext", input: "<p>a <span hidden>x</p><p>y</span> b</p>", expected: "a\n\ny b", links: false),
+        Fixture(command: "html.plaintext", input: "<p hidden>secret<p>visible", expected: "visible", links: false),
+        Fixture(command: "html.plaintext", input: "<ul><li hidden>a<li>b</ul>", expected: "• b", links: false),
+        Fixture(command: "html.plaintext", input: "<div hidden><p>x</div>y", expected: "y", links: false),
+        Fixture(command: "html.plaintext", input: "<span hidden><div>a</div>b</span>c", expected: "c", links: false),
+        Fixture(command: "html.plaintext", input: "<span hidden>a</b>b</span>c", expected: "c", links: false),
+        // Template content can't close an outer element.
+        Fixture(command: "html.plaintext", input: "<template></p>secret</template>visible", expected: "visible", links: false),
+        Fixture(command: "html.plaintext", input: "<p><span hidden><template></p></template>x</span>y", expected: "y", links: false),
+        // Past the tracking limit, same-name nesting still decides where hiding ends.
+        Fixture(command: "html.plaintext", input: "<template>" + String(repeating: "<template>", count: 257) + String(repeating: "</template>", count: 257) + "secret</template>visible", expected: "visible", links: false),
+        Fixture(command: "html.plaintext", input: "<span hidden>" + String(repeating: "<span>", count: 300) + String(repeating: "</span>", count: 300) + "secret</span>visible", expected: "visible", links: false),
+        // A table start closes an open `p`, hidden or not, so the table and what follows are visible.
+        Fixture(command: "html.plaintext", input: "<p hidden>a<span>b<table><tr><td>c</td></tr></table>d</span></p>e", expected: "c\n\nd\n\ne", links: false),
         Fixture(command: "html.plaintext", input: "<span style=\"display:none&#10;!important\">secret</span>visible", expected: "visible", links: false),
         Fixture(command: "html.plaintext", input: "<span style=\"--display:none\">a</span> <span style=\"display:none; display: block\">b</span> <span style=\"display:block;DISPLAY:none !important\">c</span>", expected: "a b", links: false),
         Fixture(command: "markdown.plaintext", input: "safe <script>secret</script> end", expected: "safe end", links: false),
@@ -74,10 +89,27 @@ import Testing
         Fixture(command: "markdown.plaintext", input: "a <script>x<script>y</script> c", expected: "a c", links: false),
         Fixture(command: "markdown.plaintext", input: "a <span hidden><textarea><!-- </textarea> --></span> b", expected: "a b", links: false),
         Fixture(command: "markdown.plaintext", input: "a <SCRIPT>x</Script > c", expected: "a c", links: false),
+        // Raw text opened inline runs through block boundaries to its end tag,
+        // as in the equivalent HTML; a non-raw hidden element ends with its block.
+        Fixture(command: "markdown.plaintext", input: "safe <script>one\n\n# secret\n\ntwo</script> end", expected: "safe end", links: false),
+        Fixture(command: "markdown.plaintext", input: "a <style>p {\n\n}\n\n- item\n\n> quote\n\n```\ncode\n```\n\n| t |\n|---|\n| c |\n\n</style> b\n\nnext", expected: "a b\n\nnext", links: false),
+        Fixture(command: "markdown.plaintext", input: "a <span hidden><script>x\n\ny</script>z</span> b", expected: "a b", links: false),
+        Fixture(command: "markdown.plaintext", input: "a <span hidden>x\n\ny</span> b", expected: "a\n\ny b", links: false),
+        Fixture(command: "markdown.plaintext", input: "- a <script>b\n- c</script> d\n- e", expected: "• a d\n• e", links: false),
+        Fixture(command: "markdown.plaintext", input: "x <script>y\n\n<div>\n</script>tail\n</div>", expected: "x tail", links: false),
+        Fixture(command: "markdown.plaintext", input: "never <script>closed\n\n# heading\n\ntext", expected: "never", links: false),
+        // Structure swallowed by raw text behaves as in the equivalent HTML.
+        Fixture(command: "markdown.plaintext", input: "> a<script>x\n\nb</script> c\n\nnext", expected: "> a c\n>\n> next", links: false),
+        Fixture(command: "markdown.plaintext", input: "1. a<script>x\n2. b</script>c\n3. d", expected: "1. ac\n2. d", links: false),
+        Fixture(command: "markdown.plaintext", input: "a <script>x\n\n| h |\n|---|\n| </script>shown |\n\nnext", expected: "a shown\n\nnext", links: false),
+        Fixture(command: "markdown.plaintext", input: "| a<script> | </script>b |\n|---|---|", expected: "ab", links: false),
+        Fixture(command: "markdown.plaintext", input: "a <script>x\n\n[</script>shown](u)", expected: "a shown", links: true),
         // Follow-up review: list items and nested tables inside table cells.
         Fixture(command: "html.plaintext", input: "<table><tr><td><ol><li>a</li><li>b</li></ol></td><td>c</td></tr></table>", expected: "1. a 2. b\tc", links: false),
         Fixture(command: "html.plaintext", input: "<table><tr><td>a<table><tr><td>x</td><td>y</td></tr><tr><td>z</td></tr></table></td><td>b</td></tr></table>", expected: "a x y z\tb", links: false),
         Fixture(command: "html.plaintext", input: "<table><tr><td><table><tr><td>in</td></tr></table>after</td><td>b</td></tr><tr><td>2</td><td>3</td></tr></table><table><tr><td>next</td></tr></table>", expected: "in after\tb\n2\t3\n\nnext", links: false),
+        // Inline HTML in link text passes through, as in cmark.
+        Fixture(command: "markdown.html", input: "[<b>x</b> y](u)", expected: "<p><a href=\"u\"><b>x</b> y</a></p>", links: false),
         // A reference image inside a link can't be re-parsed alone: keep the flat text.
         Fixture(command: "markdown.html", input: "x [![a][r]](u)\n\n[r]: i.png", expected: "<p>x <a href=\"u\">a</a></p>", links: false),
         Fixture(command: "markdown.html", input: "[![Build](b.svg)](https://ci)", expected: "<p><a href=\"https://ci\"><img src=\"b.svg\" alt=\"Build\" /></a></p>", links: false),
@@ -204,6 +236,11 @@ import Testing
             ("markdown.plaintext", String(repeating: "<a", count: 100_000), true),
             ("markdown.html", String(repeating: "> ", count: 10_000) + "x", false),
             ("markdown.plaintext", String(repeating: "- ", count: 10_000) + "x", false),
+            // Nesting just inside the limit renders without exhausting the
+            // stack of a background thread.
+            ("markdown.html", String(repeating: "> ", count: 127) + "x", true),
+            ("markdown.plaintext", String(repeating: "> ", count: 127) + "x", true),
+            ("markdown.html", (0..<60).map { String(repeating: "  ", count: $0) + "- x" }.joined(separator: "\n"), true),
             // Deep nesting with a lot of text: prefixes cost O(1) per character.
             ("html.plaintext", String(repeating: "<blockquote><ul><li>", count: 42) + String(repeating: "word ", count: 150_000), true),
             ("markdown.plaintext", String(repeating: "> ", count: 120) + String(repeating: "word ", count: 150_000), true),
@@ -337,5 +374,30 @@ import Testing
         #expect(try run("markdown.html", "```\n" + String(repeating: ">", count: 10000) + "\n```").isSuccess)
         #expect(try run("markdown.html", String(repeating: "- ", count: 10000) + "x") == .tooLarge(ToolLimits.standard.nestingLimitMessage))
         #expect(try run("markdown.plaintext", "**a** *b* ~~c~~ `d` ![](x)").output?.primaryText == "a b c d")
+    }
+}
+
+@Suite struct MarkdownPlainTextLimitTests {
+    private func run(_ text: String, limits: ToolLimits) throws -> ToolResult {
+        let command = try #require(MarkupTools.commands.first { $0.id == "markdown.plaintext" })
+        return command.run(ToolRequest(input: .text(text), limits: limits))
+    }
+
+    /// The output limit applies to the plain text, not to the intermediate HTML.
+    @Test func outputLimitAppliesToThePlainText() throws {
+        #expect(try run("x", limits: ToolLimits(maxOutputBytes: 1)).output?.primaryText == "x")
+        let ampersands = String(repeating: "&", count: 1_000)
+        #expect(try run(ampersands, limits: ToolLimits(maxOutputBytes: 1_000)).output?.primaryText == ampersands)
+        let tooSmall = ToolLimits(maxOutputBytes: 999)
+        #expect(try run(ampersands, limits: tooSmall) == .tooLarge(tooSmall.outputLimitMessage))
+    }
+
+    /// Deep nesting renders the full structure, not just without crashing.
+    @Test func deepNestingKeepsItsStructure() throws {
+        let markdown = String(repeating: "> ", count: 127) + "x"
+        #expect(try run(markdown, limits: .standard).output?.primaryText == String(repeating: "> ", count: 127) + "x")
+        let html = try #require(MarkupTools.commands.first { $0.id == "markdown.html" })
+        let expected = String(repeating: "<blockquote>\n", count: 127) + "<p>x</p>\n" + String(repeating: "</blockquote>\n", count: 127)
+        #expect(html.run(ToolRequest(input: .text(markdown))).output?.primaryText == String(expected.dropLast()))
     }
 }

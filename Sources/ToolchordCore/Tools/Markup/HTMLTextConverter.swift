@@ -12,6 +12,33 @@ enum HTMLTextConverter {
     static let paragraphs: Set<String> = ["p", "h1", "h2", "h3", "h4", "h5", "h6", "pre", "listing", "blockquote", "ul", "ol", "menu", "dl", "table", "hr", "figure", "address", "fieldset", "details"]
     static let lines: Set<String> = ["article", "aside", "body", "caption", "center", "dd", "dialog", "div", "dt", "figcaption", "footer", "form", "header", "hgroup", "html", "legend", "li", "main", "nav", "option", "search", "section", "summary", "tbody", "textarea", "tfoot", "thead", "tr"]
     static let lists: Set<String> = ["ul", "ol", "menu", "dl"]
+    /// End tags of enclosing blocks: inside a hidden element they close it, as
+    /// `</p>` closes an unclosed `<span hidden>` in a browser.
+    static let enclosingEnds: Set<String> = paragraphs.union(lines).union(["td", "th"])
+    /// Start tags that end an open `p`.
+    static let closesParagraph: Set<String> = [
+        "address", "article", "aside", "blockquote", "center", "details", "dialog", "div", "dl", "fieldset",
+        "figcaption", "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hgroup", "hr",
+        "listing", "main", "menu", "nav", "ol", "p", "pre", "search", "section", "summary", "table", "ul",
+    ]
+    /// The most elements tracked inside a hidden element.
+    static let maxHiddenInner = 256
+
+    /// Whether start tag `start` implicitly ends the hidden element `hidden`
+    /// (an omitted end tag, as for `<p hidden>a<p>b`), given the elements
+    /// opened inside it.
+    static func startTagEnds(_ hidden: String, start: String, inner: [String]) -> Bool {
+        switch hidden {
+        case "p": closesParagraph.contains(start) && !inner.contains { ["button", "table", "td", "th", "caption", "template", "object"].contains($0) }
+        case "li": start == "li" && !inner.contains { lists.contains($0) }
+        case "dt", "dd": (start == "dt" || start == "dd") && !inner.contains("dl")
+        case "option": start == "option" || start == "optgroup"
+        case "tr": start == "tr" && !inner.contains("table")
+        case "td", "th": ["td", "th", "tr"].contains(start) && !inner.contains("table")
+        default: false
+        }
+    }
+
     /// Elements that never have content or an end tag.
     static let void: Set<String> = ["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]
 
@@ -111,7 +138,14 @@ enum HTMLTextConverter {
     static func convert(_ text: String, writer: PlainTextWriter, request: ToolRequest) throws {
         let b = Array(text.utf8)
         var i = 0; var frames: [Frame] = []; var depth = 0
-        var hiddenName: String?; var hiddenDepth = 0; var rawName: String?
+        // The hidden element and the elements opened inside it so far. Past
+        // `maxHiddenInner` the stack overflows: only same-name nesting
+        // (`hiddenSameDepth`, always counted) decides where it ends.
+        var hiddenName: String?; var hiddenInner: [String] = []; var rawName: String?
+        var hiddenOverflow = false; var hiddenSameDepth = 0
+        // Elements hidden by attribute end where a browser would close them;
+        // hidden containers such as `template` only at their own end tag.
+        var hiddenByAttribute = false
         // `textarea` content is raw text that is shown (entities decoded, no tags).
         var rawKeepsText = false
         var preDepth = 0; var dropFirstBreak = false
@@ -221,17 +255,53 @@ enum HTMLTextConverter {
             guard let (t, next) = try tag(b, at: i, cancellation: request.cancellation) else { break }
             i = next
             if let h = hiddenName {
-                if t.name == h { if t.end { hiddenDepth -= 1 } else if !t.selfClosing { hiddenDepth += 1 } }
-                if hiddenDepth == 0 { hiddenName = nil }
-                // Raw text (including a textarea's) can't close the container.
-                if !t.end && (raw.contains(t.name) || t.name == "textarea") { rawName = t.name; rawKeepsText = false }
-                continue
+                // Implied ends need fully tracked nesting, and nothing in
+                // template, svg, or math content can close an outer element.
+                let impliedEnds = hiddenByAttribute && !hiddenOverflow && !hiddenInner.contains { ["template", "svg", "math"].contains($0) }
+                if t.end {
+                    if !hiddenOverflow, let open = hiddenInner.lastIndex(of: t.name) {
+                        hiddenSameDepth -= hiddenInner[open...].filter { $0 == h }.count
+                        hiddenInner.removeSubrange(open...)
+                        continue
+                    }
+                    if t.name == h {
+                        if hiddenSameDepth > 0 {
+                            hiddenSameDepth -= 1
+                        } else {
+                            hiddenName = nil
+                            hiddenInner = []
+                            hiddenOverflow = false
+                        }
+                        continue
+                    }
+                    // The end of an enclosing block closes the hidden element
+                    // too; the tag itself is visible markup.
+                    guard impliedEnds, enclosingEnds.contains(t.name) else { continue }
+                } else if !(impliedEnds && startTagEnds(h, start: t.name, inner: hiddenInner)) {
+                    // Raw text (including a textarea's) can't close the container.
+                    if raw.contains(t.name) || t.name == "textarea" { rawName = t.name; rawKeepsText = false }
+                    if !t.selfClosing && !void.contains(t.name) {
+                        if t.name == h { hiddenSameDepth += 1 }
+                        if hiddenInner.count < maxHiddenInner { hiddenInner.append(t.name) } else { hiddenOverflow = true }
+                    }
+                    continue
+                }
+                hiddenName = nil
+                hiddenInner = []
+                hiddenOverflow = false
+                hiddenSameDepth = 0
             }
             if !t.end, raw.contains(t.name) { rawName = t.name; continue }
             if !t.end, t.name == "textarea", isHiddenByAttribute(t) { rawName = t.name; rawKeepsText = false; continue }
             if !t.end, hidden.contains(t.name) || isHiddenByAttribute(t) {
                 // A hidden void element (`<img hidden>`) just disappears.
-                if !t.selfClosing && !void.contains(t.name) { hiddenName = t.name; hiddenDepth = 1 }
+                if !t.selfClosing && !void.contains(t.name) {
+                    hiddenName = t.name
+                    hiddenInner = []
+                    hiddenOverflow = false
+                    hiddenSameDepth = 0
+                    hiddenByAttribute = !hidden.contains(t.name)
+                }
                 continue
             }
             let nestedList = lists.contains(t.name) && frames.contains { ["li", "dd", "dt"].contains($0.name) }

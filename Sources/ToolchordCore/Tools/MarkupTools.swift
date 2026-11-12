@@ -62,9 +62,7 @@ public enum MarkupTools {
             case .markdownHTML:
                 output = try MarkdownHTMLRenderer.render(MarkdownDocument.parse(text, request: request), request: request)
             case .markdownText:
-                let writer = PlainTextWriter(request: request)
-                try MarkdownTextRenderer.render(MarkdownDocument.parse(text, request: request), writer: writer, request: request)
-                output = writer.finish()
+                output = try markdownPlainText(text, request: request)
             }
             let isHTML = format == .markdownHTML
             return .success(ToolOutput(
@@ -82,6 +80,25 @@ public enum MarkupTools {
         } catch {
             return .invalid(ToolDiagnostic("Couldn’t parse the Markdown."))
         }
+    }
+}
+
+extension MarkupTools {
+    /// Markdown to plain text is the plain text of the Markdown's HTML: inline
+    /// and block HTML, raw text such as a `<script>` spanning paragraphs, and
+    /// hidden elements then follow exactly the rules of HTML conversion.
+    static func markdownPlainText(_ text: String, request: ToolRequest) throws -> String {
+        let document = try MarkdownDocument.parse(text, request: request)
+        // The HTML is only an intermediate, so the output limit applies to the
+        // final text. Its own budget scales with the input, since markup and
+        // escaping (`&` → `&amp;`) outweigh the text, and stays bounded.
+        func scaled(_ value: Int, by factor: Int) -> Int { value > Int.max / factor ? Int.max : value * factor }
+        var htmlRequest = request
+        htmlRequest.limits.maxOutputBytes = max(scaled(request.limits.maxOutputBytes, by: 4), scaled(request.limits.maxInputBytes, by: 8))
+        let html = try MarkdownHTMLRenderer.render(document, request: htmlRequest, taskMarkersAsText: true)
+        let writer = PlainTextWriter(request: request)
+        try HTMLTextConverter.convert(html, writer: writer, request: request)
+        return writer.finish()
     }
 }
 
