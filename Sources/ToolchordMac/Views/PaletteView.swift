@@ -558,23 +558,28 @@ private struct FieldRow: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(field.label)
-                .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 112, alignment: .leading)
-                .lineLimit(2)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(field.value.isEmpty ? "(empty)" : field.value)
-                    .font(field.isMonospaced ? .system(size: 12, design: .monospaced) : .system(size: 12.5))
-                    .foregroundStyle(field.value.isEmpty ? Color.secondary : toneColor)
-                    .lineLimit(4)
-                    .textSelection(.enabled)
-                if let note = field.note {
-                    Text(note)
-                        .font(.system(size: 11))
-                        .foregroundStyle(field.tone == .warning ? Theme.warning : Color.secondary)
+            // Combine only the text so the Copy button stays a separate
+            // accessibility element with its own label and action.
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(field.label)
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 112, alignment: .leading)
+                    .lineLimit(2)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(field.value.isEmpty ? "(empty)" : field.value)
+                        .font(field.isMonospaced ? .system(size: 12, design: .monospaced) : .system(size: 12.5))
+                        .foregroundStyle(field.value.isEmpty ? Color.secondary : toneColor)
+                        .lineLimit(4)
+                        .textSelection(.enabled)
+                    if let note = field.note {
+                        Text(note)
+                            .font(.system(size: 11))
+                            .foregroundStyle(field.tone == .warning ? Theme.warning : Color.secondary)
+                    }
                 }
             }
+            .accessibilityElement(children: .combine)
             Spacer(minLength: 4)
             if field.isCopyable {
                 Button {
@@ -590,7 +595,6 @@ private struct FieldRow: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .accessibilityElement(children: .combine)
     }
 
     private var toneColor: Color {
