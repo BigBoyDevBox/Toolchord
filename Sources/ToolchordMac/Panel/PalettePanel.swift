@@ -14,6 +14,8 @@ protocol PaletteCommandHandling: AnyObject {
     func dismissPanel()
     /// The search field's field editor received a paste command.
     func pasteIntoSearch()
+    /// The user pressed ⌘V (or the Paste button) to paste.
+    func pasteFromClipboard()
 }
 
 /// A borderless, non-activating floating panel.
@@ -154,6 +156,12 @@ final class PalettePanel: NSPanel {
             item.tag = NSTextFinder.Action.showFindInterface.rawValue
             return NSApp.sendAction(#selector(NSResponder.performTextFinderAction(_:)), to: firstResponder, from: item)
         case .edit(let action):
+            // Paste goes through the controller so a generator tool can
+            // explain that it does not use input.
+            if action == #selector(NSText.paste(_:)) {
+                commandHandler?.pasteFromClipboard()
+                return true
+            }
             // Accessory apps may not route standard editing shortcuts through
             // a main menu while another app is active; send them directly.
             if super.performKeyEquivalent(with: event) { return true }
