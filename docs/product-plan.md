@@ -89,7 +89,7 @@ Return opens the selected tool in the same panel. Give transforms a multiline in
 | **Paste · `⌘V`** | Replace any attached payload with the pasted text when search has focus; pastes never concatenate. In an editor, paste at the insertion point as normal. |
 | **Arrows · `↑` `↓`** | Move through search results and update the preview. In text editors, arrows move the caret. |
 | **Return · `↵`** | Open the selected command or generator from the list. In the multiline input, insert a newline. |
-| **Copy & Close · `⌘↵`** | Copy the result currently previewed for the selected action and dismiss the panel. Return focus to the originating app so the user can paste there. If copying fails, keep the panel open and show the error. |
+| **Copy & Close · `⌘↵`** | Copy the result currently previewed for the selected action and dismiss the panel. Request focus return to the originating app so the user can paste there; macOS may refuse activation, and a refused activation does not invalidate a successful copy. If copying fails, keep the panel open and show the error. |
 | **Copy & Stay · `⌥↵`** | Copy the current valid result and keep the panel open, for copying several fields or values in a row. |
 | **Escape · `Esc`** | Return from a tool to the command list with the draft intact. At the root, dismiss the panel and discard the draft. |
 | **Tab · `⇥`** | Move through controls in their visible order. Keep all available actions reachable with the keyboard and VoiceOver. |
