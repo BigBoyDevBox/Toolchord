@@ -2,27 +2,41 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const commands = [
-    { id: 'format', name: 'Format JSON', detail: 'Readable, without changing values', symbol: '{ }', aliases: 'pretty print beautify json' },
-    { id: 'minify', name: 'Minify JSON', detail: 'Remove insignificant whitespace', symbol: '{ }', aliases: 'compact json' },
-    { id: 'validate', name: 'Validate JSON', detail: 'Check syntax, preserve input', symbol: '✓', aliases: 'check json' },
-    { id: 'uuid', name: 'Generate UUID', detail: 'A new version 4 identifier', symbol: '#', aliases: 'guid uuid random id' }
+    { id: 'format', name: 'Format JSON', detail: 'Indent JSON for readability', symbol: '{ }', aliases: ['pretty print', 'beautify', 'json'] },
+    { id: 'minify', name: 'Minify JSON', detail: 'Remove insignificant whitespace', symbol: '{ }', aliases: ['compact json'] },
+    { id: 'validate', name: 'Validate JSON', detail: 'Check syntax, preserve input', symbol: '✓', aliases: ['check json'] },
+    { id: 'uuid', name: 'Generate UUID', detail: 'A new version 4 identifier', symbol: '#', aliases: ['guid', 'uuid', 'random id'] }
   ];
   const sample = '{"status":200,"requestId":9007199254740993,"cache":"HIT"}';
   const state = { payload: sample, query: '', selected: 'format', expanded: false, uuid: null, menu: false, closed: false, result: null };
   const announce = message => { $('announcement').textContent = message; };
   const command = () => commands.find(c => c.id === state.selected);
-  function matches() {
-    const query = state.query.toLowerCase().trim();
+  function matches(text = state.query, allowFuzzy = true) {
+    const query = text.toLowerCase().trim().replace(/\s+/g, ' ');
     if (!query) return commands;
+    const terms = query.split(' ');
+    const letters = terms.join('');
     return commands.map((c, order) => {
-      const name = c.name.toLowerCase();
-      const aliases = c.aliases.split(' ');
-      let rank = name === query || c.aliases === query || aliases.includes(query) ? 0 : name.startsWith(query) ? 1 : (name + ' ' + c.aliases).includes(query) ? 2 : 3;
-      let position = 0;
-      const haystack = name + ' ' + c.aliases;
-      for (const letter of query) { position = haystack.indexOf(letter, position); if (position < 0) return null; position++; }
-      return { c, rank, order };
+      const labels = [c.name.toLowerCase(), ...c.aliases];
+      if (labels.includes(query)) return { c, rank: 0, order };
+      if (labels.some(label => label.startsWith(query))) return { c, rank: 1, order };
+      const words = labels.flatMap(label => label.split(' '));
+      if (terms.every(term => words.some(word => word.startsWith(term)))) return { c, rank: 2, order };
+      if (allowFuzzy && labels.some(label => isSubsequence(letters, label))) return { c, rank: 3, order };
+      return null;
     }).filter(Boolean).sort((a, b) => a.rank - b.rank || a.order - b.order).map(item => item.c);
+  }
+  function isSubsequence(letters, label) {
+    let position = 0;
+    for (const letter of letters) {
+      position = label.indexOf(letter, position);
+      if (position < 0) return false;
+      position++;
+    }
+    return true;
+  }
+  function canUseAsSearch(text) {
+    return text !== null && text.length <= 80 && Boolean(text.trim()) && !/[\r\n]/.test(text) && matches(text, false).length > 0;
   }
   // JSON.parse checks grammar only. Its parsed values never reach the output;
   // formatting operates on lexical tokens to retain precision and duplicates.
@@ -117,7 +131,7 @@
     $('copy').replaceChildren(document.createTextNode(state.result.label ?? 'Copy & Close'), Object.assign(document.createElement('kbd'), { textContent: '⌘↵' }));
     $('key-hints').textContent = state.expanded ? 'Esc Back · Return inserts a newline' : '↑↓ Navigate · ↵ Open · Esc Dismiss';
     $('action-menu').hidden = !state.menu; $('actions').setAttribute('aria-expanded', String(state.menu));
-    $('copy-stay').disabled = !state.result.ok; $('as-search').disabled = state.payload === null;
+    $('copy-stay').disabled = !state.result.ok; $('as-search').hidden = !canUseAsSearch(state.payload);
     $('menu-clear').disabled = state.payload === null; $('menu-regenerate').hidden = state.selected !== 'uuid';
   }
   function openTool() {
@@ -163,9 +177,24 @@
   $('copy').addEventListener('click', () => copy()); $('copy-stay').addEventListener('click', () => copy(true));
   const regenerate = () => { state.uuid = crypto.randomUUID(); state.menu = false; render(); $('regenerate').hidden ? $('actions').focus() : $('regenerate').focus(); announce('New UUID generated.'); };
   $('regenerate').addEventListener('click', regenerate); $('menu-regenerate').addEventListener('click', regenerate);
-  function toggleMenu() { state.menu = !state.menu; render(); if (state.menu) $('copy-stay').disabled ? $('menu-clear').disabled ? $('actions').focus() : $('menu-clear').focus() : $('copy-stay').focus(); else $('actions').focus(); }
+  function toggleMenu() {
+    state.menu = !state.menu;
+    render();
+    const available = ['copy-stay', 'as-search', 'menu-clear', 'menu-regenerate']
+      .map($).find(button => !button.hidden && !button.disabled);
+    (state.menu && available ? available : $('actions')).focus();
+  }
   $('actions').addEventListener('click', toggleMenu);
-  $('as-search').addEventListener('click', () => { state.query = state.payload ?? ''; state.payload = null; state.menu = false; state.expanded = false; render(); $('search').focus(); });
+  $('as-search').addEventListener('click', () => {
+    if (!canUseAsSearch(state.payload)) return;
+    state.query = state.payload;
+    state.payload = null;
+    state.selected = null;
+    state.menu = false;
+    state.expanded = false;
+    render();
+    $('search').focus();
+  });
   $('sample').addEventListener('click', () => reset(sample)); $('invalid').addEventListener('click', () => reset('{"status":200,}'));
   $('uuid-scenario').addEventListener('click', () => reset(null, 'uuid')); $('reset').addEventListener('click', () => reset()); $('reopen').addEventListener('click', () => reset());
   $('palette').addEventListener('keydown', event => {

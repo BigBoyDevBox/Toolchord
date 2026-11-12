@@ -1,37 +1,35 @@
-# Review findings and implementation contracts
+# Implementation contracts
 
-Review baseline: `558498e` on `main`, checked 12 November 2026. The repository contains a product plan, not an app implementation. The six-tool scope, explicit paste, shared preview/editor evaluation, stable UUIDs, and on-device session state are good foundations. The following are design gaps to close before implementation; no runtime bug is claimed.
-
-## Findings addressed
-
-| Priority | Baseline location | Gap and consequence | Proposed resolution |
-| --- | --- | --- | --- |
-| High | `docs/product-plan.md:67` | “Primary result” is undefined for inspectors. Different views could copy different content. | Declare the exact copy payload per command; a focused field never changes it implicitly. |
-| High | `docs/product-plan.md:11–15` | Precision and decoding goals lack boundary policies. A generic parse/reserialize implementation could round JSON numbers, collapse duplicate keys, or conflate URL/form decoding. | Add deterministic fixtures and explicit text/alphabet/unit policies below. |
-| High | `docs/product-plan.md:46,102` | Stale results are mentioned, but the identity of a current result is not defined. An old completion could become copyable after input/options change or panel reopening. | Bind evaluation and copy eligibility to a full session/revision identity. |
-| Medium | `docs/product-plan.md:44,97` | Hiding only recognized tokens still exposes undetected secrets in snippets. “Draft” and clearing are not fully defined. | Use metadata-only attachment summaries for all input and an explicit session lifetime. |
-| Medium | `docs/product-plan.md:91,101` | Focus return reads as guaranteed; native feasibility omits Stage Manager and permission-state testing. | Make activation best effort; add native spike exit criteria. |
-| Medium | `docs/product-plan.md:102` | “Same input and options” is deterministic for transforms, but not a random generator. | Keep generation as an explicit session event, separate from pure evaluation. |
+The [product plan](product-plan.md) defines the panel and release scope. These contracts specify the tool results, clipboard behavior, and native interactions that the first release needs to support.
 
 ## State, evaluation, and copy
 
-Use three small boundaries: pure tool evaluation; a session coordinator for selection, edits, and generation; and Mac adapters for hotkeys, windows, pasteboard, and app activation. This is a proposed division of responsibility, not a requirement for a particular framework or package.
+Keep deterministic tool evaluation separate from session state and macOS integration. The session owns selection, edits, and generated values. The macOS integration handles the shortcut, panel, pasteboard, and app activation.
 
-- An evaluation request carries `sessionID`, `revision`, `commandID`, complete options, and the input snapshot. Increment revision immediately on input, command, or option changes; changing a generated value also increments it. `noInput` and an attached empty string are distinct.
+- An evaluation request carries `sessionID`, `revision`, `commandID`, complete options, and the input snapshot. Increment the revision immediately when input, command, options, or a generated value change. `noInput` and an attached empty string are distinct.
 - Results distinguish `needsInput`, `pending`, `success(primaryText, fields, warnings)`, `invalid(location, message)`, `unsupported`, and `tooLarge`. A successful empty string is copyable. Do not use nonempty text as the validity test.
-- Set copy ineligible synchronously before scheduling new work. Publish a completion only if its entire identity is still current. Dismissal retires the session ID; cancelling a task alone is insufficient because cancellation is cooperative.
-- Copy uses the exact primary text of the visible successful snapshot. Recheck identity on the serialized UI/session context immediately before writing; do not launch another transform on the copy path. Prevent duplicate submissions. A failed write retains the panel and reports failure; do not promise restoration of the previous clipboard if an OS write partially fails.
-- Run potentially expensive work away from the UI thread. Proposed starting limits: 1 MiB UTF-8 input, 4 MiB result, and 128 levels of JSON nesting. Reject rather than truncate; enforce limits before allocating expanded output where possible. These are product budgets to validate, not format-standard limits. Disable copy of a partial/truncated preview.
-- Generate a UUID once on first selection per session. Cache it across preview/editor/back/filter changes; only Regenerate replaces it. Transforms remain deterministic. Inject time when testing expiry presentation rather than baking the wall clock into expected output.
-- A draft includes query, payload, options, editor changes, selected command, generated values, result/error, and pending work. Back preserves it. Dismissal, copy-and-close, external app switching, screen lock, and quit retire it. Clear input invalidates results immediately. Do not persist or log payloads, derived text, or queries; a query can itself contain a secret. Clearing references is not a guarantee of forensic memory erasure.
+- Disable copy before scheduling new work. Publish a completion only if its entire identity is still current. Dismissal retires the session ID so cooperative cancellation cannot publish a result after close and reopen.
+- Copy uses the exact primary text of the visible successful snapshot. Recheck the identity immediately before writing on the same serialized context that owns session state. Prevent duplicate writes. A failed write keeps the panel open and reports the error.
+- Run potentially expensive work away from the UI thread. Start with proposed limits of 1 MiB UTF-8 input, 4 MiB output, and 128 levels of JSON or XML nesting. Enforce limits before allocating expanded output where possible. A limit error disables copy and gives no partial result.
+- Generate a UUID on first selection per session. Keep it when switching views, tools, or filters. **Regenerate** replaces it. Provide a fixed clock for tests that depend on expiry presentation.
+- Route attachment and editor paste through the same native paste command. In search, consume the provided text as an attachment and leave the query intact. In the editor, insert it through the text control. The attachment row shows its source, detected type when available, and UTF-8 byte count. Run detection on the attached text after paste.
+- A draft includes the query, payload, options, edits, selection, generated values, result, and pending work. Back preserves it. Dismissal, Copy & Close, external app switching, screen lock, and quit retire it. Clearing input immediately invalidates its result. Keep the draft in memory for the panel session and persist preferences separately.
 
 ## First-release tool contracts
 
-These policies deliberately narrow general-purpose standards for a text-only palette. Format citations establish the relevant semantics; the limits, defaults, and copy targets are Toolchord decisions.
+Each command defines its input, diagnostics, and primary copy target.
 
 ### JSON
 
 Format/minify change insignificant whitespace only, preserving string escapes, numeric tokens, member order, and duplicate names. Validate the grammar independently of formatting; do not serialize through floating-point values or a dictionary. Accept scalar roots. Report duplicate-name interoperability risk without dropping data. Use two spaces and LF by default; no trailing LF. Reject comments, trailing commas, and a leading BOM in v1 with a specific error. Locations use one-based lines and Unicode-scalar columns, treating CRLF as one line break. Primary copy is transformed JSON, or unchanged input for Validate. [RFC 8259, §§2,4,6,8](https://www.rfc-editor.org/rfc/rfc8259.html)
+
+### XML
+
+**Validate XML** checks well-formedness and namespace usage for one pasted XML 1.0 document. Show **Well-formed XML** on success and make the original text the primary copy result. Report the first syntax error with a one-based line and column in the original input. DTD and schema validation are outside the first release. [XML 1.0, §§2.1,5.1](https://www.w3.org/TR/xml/#sec-well-formed) · [Namespaces in XML 1.0](https://www.w3.org/TR/xml-names/)
+
+Both XML commands accept the pasted Unicode text directly. Reject a document type declaration as unsupported before processing its entities. Allow predefined XML entities and numeric character references. Keep parsing local to the pasted text, with external entity resolution disabled and schema locations and XInclude elements treated as ordinary markup. [XML 1.0, §§2.8,4](https://www.w3.org/TR/xml/#sec-prolog-dtd) · [Apple XMLParser entity resolution](https://developer.apple.com/documentation/foundation/xmlparser/externalentityresolvingpolicy-swift.enum/never)
+
+**Format XML** validates first, then uses two spaces and LF for indentation in elements whose direct content consists of child markup and optional indentation whitespace. Preserve mixed-content regions and whitespace wherever `xml:space="preserve"` is in effect, including inherited settings. Keep text outside the indentation regions and preserve reference spelling, namespace prefixes and declarations, attributes, comments, CDATA sections, processing instructions, and the XML declaration. Use the formatted text as the primary copy result. [XML 1.0, §§2.4–2.11](https://www.w3.org/TR/xml/#sec-white-space)
 
 ### Base64
 
@@ -55,7 +53,7 @@ Use platform-provided secure random generation for UUID v4. Copy lowercase canon
 
 ## Independent expected-result fixtures
 
-These are an acceptance corpus for the future implementation, not tests that have been run against a native app. Literal strings below use JSON escape notation where necessary. Establish these expectations before writing tool code; add implementation tests from them later.
+Use these expected results to test the tool implementation. Literal strings use JSON escape notation where necessary.
 
 | Case | Input / action | Required result |
 | --- | --- | --- |
@@ -63,8 +61,13 @@ These are an acceptance corpus for the future implementation, not tests that hav
 | JSON duplicates / string whitespace | Minify `{"a":1, "a":2, "s":"a  b"}` | `{"a":1,"a":2,"s":"a  b"}`; duplicate warning, no member loss |
 | JSON scalar | Format `true` | `true`, successful and copyable |
 | JSON syntax location | Two-line fixture below | Invalid at line 2, column 8; no copy |
+| XML formatting | Format `<r xmlns:p="urn:example"><p:a id="1"/><p:b/></r>` | `<r xmlns:p="urn:example">\n  <p:a id="1"/>\n  <p:b/>\n</r>` |
+| XML mixed content | Format `<p>Hello <b>world</b> !</p>` | Original text, including the spaces on both sides of the child element |
+| XML whitespace and markup | Format `<r xml:space="preserve"><x><a/>  <b/><!--keep--><![CDATA[ < ]]><?keep x?></x></r>` | Original text, including inherited whitespace, the comment, CDATA, and processing instruction |
+| XML validation and location | Validate `<r xmlns:p="urn:example"><p:x>&amp;&#x20;</p:x></r>`, then `<r>\n  </wrong>` | The first input is well formed and copies unchanged. The second reports a line and column on line 2 and disables copy. |
+| XML document type | Format or validate `<!DOCTYPE r SYSTEM "https://example.test/r.dtd"><r/>`, the same declaration with `file:///example.dtd`, and `<!DOCTYPE r [<!ENTITY x "text">]><r>&x;</r>` | Unsupported `DOCTYPE` diagnostic. The parser performs no network or file reads and expands no custom entity. |
 | Base64 UTF-8 | Encode `✓` in Standard | `4pyT`; decoding returns `✓` |
-| Base64 alphabet/padding | Encode `ÿ` in Standard / URL-safe | `w78=` / `w78`; URL-safe decode accepts both `w78` and `w78=` |
+| Base64 alphabet and padding | Encode `😀` in Standard and URL-safe modes | Standard emits `8J+YgA==`. URL-safe emits `8J-YgA` and accepts `8J-YgA==` as well. |
 | Base64 canonical/non-text | Decode `Zh==` / `/w==` in Standard | First rejected for nonzero pad bits; second rejected as non-UTF-8 text |
 | Empty output | Decode attached empty string | Success with empty primary text; copy enabled |
 | URL decoding | Decode component `a+b%20c%252F` | `a+b c%2F`; exactly one decoding pass |
@@ -85,22 +88,26 @@ Syntax-location fixture (the second line begins with two spaces):
   "a": }
 ```
 
-For structured copy targets, compare parsed structure and order unless canonical formatting is specified. For JSON format/minify and component transforms, compare exact output text. Also verify every tool offline and every error transition after a previously successful result.
+For structured copy targets, compare parsed structure and order unless canonical formatting is specified. Compare exact text for JSON and XML formatting and component transforms. Verify every tool offline and exercise each error after a previously successful result.
 
-## Native spike exit criteria
+## Native panel prototype
 
-Build only the panel shell plus JSON/UUID first. Do not select minimum macOS version or distribution from documentation alone. Record the chosen deployment target, tested OS/hardware, shortcut mechanism, permission requirements, and observed limitations in the spike result.
+Start with the panel shell, then exercise JSON and UUID to prove both input paths. Record the tested OS and hardware, deployment target, distribution route, shortcut mechanism, and observed permissions and limitations.
+
+- Try `NSPanel` with `.nonactivatingPanel` and `.accessory` activation policy. Test eligible floating window behavior in Stage Manager and full-screen Spaces, including `.canJoinAllApplications` on macOS 13 and later. Test actual keyboard focus and observe app activation separately from the panel resigning key status. [Apple NSPanel](https://developer.apple.com/documentation/appkit/nspanel) · [Accessory activation policy](https://developer.apple.com/documentation/appkit/nsapplication/activationpolicy-swift.enum/accessory) · [Window collection behavior](https://developer.apple.com/documentation/appkit/nswindow/collectionbehavior-swift.struct/canjoinallapplications)
+- Evaluate the Carbon-backed KeyboardShortcuts package as a candidate for registration and shortcut recording. Verify the chosen method in the signed build. If login launch is offered, test an opt-in registration with `SMAppService` where available. [KeyboardShortcuts](https://github.com/sindresorhus/KeyboardShortcuts) · [Apple login registration](https://developer.apple.com/documentation/servicemanagement/smappservice/register())
+- Capture the frontmost app on invocation. After a successful copy, request focus return if needed and leave the copy successful if the origin app exits or the system refuses activation. Use the pasteboard write API’s success result to decide whether to dismiss the panel. [Apple frontmost application](https://developer.apple.com/documentation/appkit/nsworkspace/frontmostapplication) · [Apple app activation](https://developer.apple.com/documentation/appkit/nsrunningapplication/activate(from:options:)) · [Apple pasteboard write result](https://developer.apple.com/documentation/appkit/nspasteboard/writeobjects(_:))
+
+### Exit criteria
 
 | Area | Required observation |
 | --- | --- |
-| Invocation | Recorded hotkey and menu-bar launch work; an unsuccessful registration is recoverable. Repeated invocation focuses the existing panel rather than creating another session/window. |
-| Placement | Target the display containing the source app's key window when available; otherwise use the pointer display. Clamp to visible bounds; handle display removal. Validate how reliably AppKit can identify the source display without extra permissions. |
-| Spaces / Stage Manager | First typed character lands in search in ordinary, full-screen, and Stage Manager sessions; the panel does not move the user's workspace unexpectedly. |
-| Focus | Copy success returns to the invoking editor when the OS permits; origin exit or denied activation does not turn clipboard success into failure. App switching during evaluation dismisses without stealing focus. |
-| Paste | Opening/navigation makes no clipboard reads. Genuine Paste works with programmatic access allowed, denied, and asking on OS versions that expose this policy. Non-text paste preserves existing input. |
-| Session end | Root Escape, successful Copy & Close, app switch, and screen lock clear state and retire pending work. Field Copy, Copy without closing, and Tool Back preserve the draft. |
+| Invocation | The recorded hotkey and menu-bar launch work. An unsuccessful registration is recoverable. Repeated invocation focuses the existing panel and preserves its session. |
+| Placement | Target the display containing the source app's key window when available, falling back to the pointer display. Clamp the panel to visible bounds and handle display removal. Validate how reliably AppKit can identify the source display without extra permissions. |
+| Spaces / Stage Manager | The first typed character lands in search in ordinary, full-screen, and Stage Manager sessions. The panel opens on the user’s current workspace. |
+| Focus | Copy & Close returns to the invoking app when the OS permits. A successful copy stays successful if the origin exits or activation is refused. App switching during evaluation dismisses the panel and leaves focus where the user moved it. |
+| Paste | Native Paste works with programmatic access allowed, denied, and asking on OS versions that expose this policy. Opening and navigating the panel leave the pasteboard untouched. Non-text paste preserves existing input. [Apple pasteboard access behavior](https://developer.apple.com/documentation/appkit/nspasteboard/accessbehavior-swift.enum) |
+| Session end | Root Escape, successful Copy & Close, app switch, and screen lock clear state and retire pending work. Field Copy and Back preserve the draft. |
 | Input / accessibility | IME composition gets Return/Escape first. Native editing, Full Keyboard Access, VoiceOver, large text, increased contrast, reduced motion, and light/dark appearance remain usable. |
 | Responsiveness | Establish initial budgets of ≤150 ms warm invocation to usable search and ≤100 ms evaluation for a 10 KiB input on documented hardware. Measure rather than claim these targets; test limit-sized input separately and verify the UI can cancel/close. |
-| Distribution | Test the selected sandbox/signing route and restart/login behavior. Confirm the core workflow's actual permissions; do not assume auto-paste or selected-text capture is required. |
-
-Apple documents [`canJoinAllApplications`](https://developer.apple.com/documentation/appkit/nswindow/collectionbehavior-swift.struct/canjoinallapplications) for eligible floating overlays in Stage Manager and full-screen Spaces (macOS 13+), [`activate(from:options:)`](https://developer.apple.com/documentation/appkit/nsrunningapplication/activate(from:options:)) as a request rather than a guarantee (macOS 14+), and [`NSPasteboard.AccessBehavior`](https://developer.apple.com/documentation/appkit/nspasteboard/accessbehavior-swift.enum) as a user-paste/programmatic-access distinction (macOS 15.4+). Availability does not set Toolchord's minimum OS. Choose availability-gated APIs and verify the actual panel configuration; no native behavior has been tested by this documentation PR.
+| Distribution | Test the selected sandbox and signing configuration, including restart and login behavior. Confirm the actual permissions required for shortcut registration, paste, and copy. |
