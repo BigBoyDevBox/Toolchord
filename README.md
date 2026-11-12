@@ -7,3 +7,5 @@ The first release focuses on six offline tools for JSON, Base64, URLs, JWTs, tim
 Start with the [product plan and design](docs/product-plan.md) for the panel layouts, keyboard behavior, first release scope, and implementation milestones.
 
 **Status** · Product design. Toolchord is the working name.
+
+The [implementation notes](docs/implementation-notes.md) collect the native mechanisms, risks, and open decisions behind the plan's milestones.
