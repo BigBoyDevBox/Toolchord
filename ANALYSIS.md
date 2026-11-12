@@ -1,6 +1,6 @@
 # Remaining Toolchord findings
 
-Reviewed on 2026-11-12 against `6714272`. File/line references refer to that baseline. Findings implemented in open PRs are omitted. All remaining findings are optional improvements; observations that still need live validation are identified below.
+Reviewed on 2026-11-12 against `6714272`, consolidated on 2026-11-13. File/line references refer to the review baseline. Findings implemented in open PRs are omitted. All remaining findings are optional improvements; observations that still need live validation are identified below.
 
 ### Empty search results retain a stale accessibility selection
 
@@ -22,6 +22,36 @@ Developers pasting a complete Authorization value must manually search for Decod
 
 Recognize a bounded Bearer-prefixed token for detection without modifying the attached input; keep the decoder's removal warning. Rough effort: 1 hour.
 
+### BOM-bearing XML misses XML suggestions
+
+bugs — nice-to-have
+
+Location: `Sources/ToolchordCore/Detection/InputDetector.swift:43–46`.
+
+Pasting U+FEFF followed by `<r/>` labels it Text and omits XML suggestions, even though XMLTools accepts an initial BOM. This affects XML copied from BOM-bearing files and was confirmed against the built module.
+
+Ignore one initial BOM for lexical detection while retaining the original payload bytes and diagnostic offsets. Rough effort: 1 hour.
+
+### Nonhierarchical URIs miss Inspect URL suggestions
+
+bugs — nice-to-have
+
+Location: `Sources/ToolchordCore/Detection/InputDetector.swift:158–170`.
+
+URI detection requires `://`, although Inspect URL accepts `mailto:a@example.com`, `data:text/plain,Hi` and `file:/tmp/a`. Users inspecting these forms receive Text suggestions instead. Confirmed against the built module.
+
+Align bounded scheme recognition with the inspector, retaining safeguards for drive-letter paths and ordinary prose. Rough effort: 1–2 hours.
+
+### Padded numeric entities miss decoder suggestions
+
+bugs — nice-to-have
+
+Location: `Sources/ToolchordCore/Detection/InputDetector.swift:325–328`.
+
+The detector looks ahead only 12 characters after an ampersand, while HTMLTools accepts numeric references with up to 32 digits. A valid reference such as `&#0000000000065;` decodes successfully but does not suggest Unescape HTML. This affects uncommon numeric-entity input.
+
+Align the bounded numeric-reference lookahead with the decoder's limit, without broadening named-entity support accidentally. Rough effort: 1 hour.
+
 ### The benchmark exercises early rejection for many tools
 
 general issues — nice-to-have
@@ -38,9 +68,9 @@ general issues — nice-to-have
 
 Location: `Sources/ToolchordMac/Snapshots/SnapshotRenderer.swift:19–70`.
 
-Maintainers still lack long-field, dense-option, high-contrast, and constrained-height scenarios. These are likely places for layout regressions. The four-warning JWT scenario is already included in an open PR and is excluded from this remaining work.
+Maintainers still lack long-field, high-contrast, and constrained-height scenarios. Long copy titles and the full horizontal footer also need stress coverage at narrow widths, beyond the existing 600-point simple case. Actual footer overflow is not established. Dense-option and four-warning JWT coverage is implemented in open PRs and is excluded from this remaining work.
 
-Add a small representative set and document manual checks for real glass, keyboard traversal, and VoiceOver. Offscreen snapshots cannot prove those behaviors. Rough effort: Half a day.
+Add a small representative set and document manual checks for real glass, keyboard traversal, and VoiceOver. If footer crowding is reproduced, hide low-priority hints first. Offscreen snapshots cannot prove interactive behavior; attempts to inspect SwiftUI accessibility in the Swift Testing host returned an empty tree. Rough effort: Half a day.
 
 ### Multiple line scanners need an explicit shared contract
 
@@ -82,6 +112,26 @@ Large JWT/URL fields are traversed completely when estimating a row that shows a
 
 Stop after the third newline and use a bounded newline scan, caching only if profiling warrants it. Rough effort: 1 hour.
 
+### Detection precedes editor debounce on the main actor
+
+performance problems, stuttering, and jank — nice-to-have
+
+Location: `Sources/ToolchordSession/PaletteSession.swift:18–22,278–282`.
+
+Editing a near-limit payload runs the complete profiler synchronously before the 60 ms evaluation debounce. Detection alone took 33–43 ms for 1 MiB Debug samples on the review host. Release typing jank is not established, so this is a measurement opportunity rather than a confirmed frame stall.
+
+Measure optimized typing latency, then bound or defer profiling if needed while preserving immediate stale-result copy invalidation. Rough effort: Half a day for measurement and a safe design.
+
+### Superseded line transformations do not stop cooperatively
+
+performance problems, stuttering, and jank — nice-to-have
+
+Location: `Sources/ToolchordCore/Tools/LineTools.swift:34–174`.
+
+Sorting, deduplication and reversal do not consult request cancellation, so obsolete work can keep using background CPU. Session revisions correctly prevent stale publication and copy. No material throughput regression was measured.
+
+Add useful checkpoints around long stages and within traversals where practical; measure large-line workloads before changing the sorting algorithm. Rough effort: 2–4 hours.
+
 ### Long inspector fields have no full-value view
 
 missing features — nice-to-have
@@ -112,15 +162,15 @@ Developers can generate UUIDs but cannot inspect a pasted identifier's version, 
 
 Add a separate Inspect UUID command with strict validation, normalized forms and v7 timestamp fields. Keep generators' stable-seed behavior unchanged. Rough effort: Half a day to one day.
 
-### Dense options and footer do not adapt to narrow width
+### Named CSS colors are unsupported despite the type comment
 
-visual issues and layout problems — nice-to-have
+missing features — nice-to-have
 
-Location: `Sources/ToolchordMac/Views/PaletteView.swift:778–791,817–855`.
+Location: `Sources/ToolchordCore/Tools/ColorTools.swift:142–223`; `Sources/ToolchordCore/Detection/InputProfile.swift:16`.
 
-The body stacks below 640 points, but segmented options and the full footer remain horizontal. The rendered 600-point simple case fits; Random String's two option groups and long copy titles still need stress coverage. Actual overflow is not established.
+Neither detection nor conversion accepts names such as `red` or `rebeccapurple`, although the color-kind comment claims named-color support. Web developers must look up the numeric form themselves. This is an optional feature extension; the user-facing conversion contract lists hex, RGB and HSL.
 
-Use menu pickers or wrap options when space is limited and hide low-priority footer hints. Verify narrow dense-option and constrained-height snapshots. Rough effort: 2–4 hours.
+Consider a shared standard name table for detection and conversion, including transparent, with contract fixtures and no network dependency. Until then, narrow the capability comment to supported syntax. Rough effort: Half a day for support; minutes for the comment correction.
 
 ### Each result refresh resets the reading position
 
@@ -131,6 +181,26 @@ Location: `Sources/ToolchordMac/Views/CodeTextView.swift:208–213`.
 Users editing a long document lose their place in the output whenever evaluation succeeds because the result scrolls back to the beginning.
 
 Preserve and clamp the scroll position for edits to the same tool/input. Reset deliberately for a newly selected tool or attached payload. Rough effort: 2–3 hours.
+
+### Pending field Copy controls look usable but do nothing
+
+usability: fast, convenient, and clear — nice-to-have
+
+Location: `Sources/ToolchordMac/Views/PaletteView.swift:465–475,580`.
+
+Previous inspector output is dimmed during reevaluation, but its field Copy buttons are not disabled. Clicking them does nothing because session gating correctly rejects stale writes. Users get no explanation for the apparently available action.
+
+Disable field Copy controls with the pending state, preserving the existing session-level guard. Rough effort: Under an hour.
+
+### Immediate progress badges can defeat delayed progress treatment
+
+usability: fast, convenient, and clear — nice-to-have
+
+Location: `Sources/ToolchordMac/Views/PaletteView.swift:735,956`.
+
+The result spinner waits 150 ms to avoid flicker, but the status badge immediately shows a spinner and Working text on every pending transition. Rapid typing or selection can therefore still produce distracting status changes. This is source-established behavior; no frame capture was made.
+
+Share a delayed pending-indicator policy between the badge and result pane, without delaying invalidation or copy gating. Rough effort: 1–2 hours.
 
 ### Transparency is hard to distinguish in color swatches
 
@@ -170,7 +240,9 @@ Location: `Sources/ToolchordMac/Panel/PanelController.swift:309–374`.
 
 Decode Base64 → format JSON or HTML → clean plaintext currently requires copy and paste, replacing the user's clipboard along the way.
 
-Add an explicit session-local “Use result as input” action that attaches the ready primary output and returns to search, preserving revision/copy gating and requiring no saved history. Rough effort: Half a day.
+Add an explicit session-local “Use result as input” action that attaches the ready primary output and returns to search, preserving revision/copy gating and requiring no saved history. Rough effort: Half a day for a prototype; 1–2 days with reversible draft handling.
+
+Preserve a clear way back to the original draft if a chain is introduced; draft ownership and undo behavior need an explicit design before implementation.
 
 ### Optional examples could teach unfamiliar tools
 
@@ -180,4 +252,14 @@ Reproduction: Open an unfamiliar tool with no input; the empty state asks for a 
 
 First-time users of time offsets, number prefixes, colors and encoding tools must guess syntax or consult docs.
 
-Add a clearly labeled “Try an example” action for selected tools, using public synthetic fixtures and an explicit user action. Keep ordinary opening free of injected sample data. Rough effort: Half a day for a small curated set and session tests.
+Add a clearly labeled “Try an example” action for selected tools, using deterministic public synthetic fixtures and an explicit user action that explains it replaces the current input. Keep ordinary opening free of injected sample data. Rough effort: Half a day for a small curated set and session tests.
+
+### Explain ambiguous automatic suggestions briefly
+
+novel, delightful, or quirky ideas worth trying — nice-to-have
+
+Location: `Sources/ToolchordMac/Views/PaletteView.swift:163–170`; `Sources/ToolchordSession/CommandListing.swift`.
+
+Curious users cannot see why ambiguous input was labeled Base64, hex or a timestamp. A detection label can be mistaken for validation.
+
+Prototype a short metadata tooltip explaining the lexical hint without displaying pasted secrets or claiming validity. Keep it out of the fast keyboard path and validate demand before adding persistent UI. Rough effort: Half a day.
