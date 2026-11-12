@@ -364,3 +364,58 @@ struct InlineEvaluator: ToolEvaluating {
         if case .ready(.tooLarge) = session.preview {} else { Issue.record("Expected tooLarge, got \(session.preview)") }
     }
 }
+
+/// Counts evaluator calls, for checking that one change schedules one evaluation.
+actor CountingEvaluator: ToolEvaluating {
+    private(set) var calls: [String] = []
+
+    func evaluate(_ command: ToolCommand, _ request: ToolRequest) async -> ToolResult {
+        calls.append(command.id)
+        return command.run(request)
+    }
+}
+
+@MainActor
+@Suite struct PaletteSessionReviewTests {
+    /// Review P2: "é" and "e" + U+0301 are equal Swift strings but different bytes.
+    @Test func canonicallyEquivalentEditsReevaluate() async {
+        let clipboard = MemoryClipboard()
+        let session = PaletteSession(evaluator: InlineEvaluator(), clipboard: clipboard, preferences: MemoryPreferences())
+        session.editDebounce = .zero
+        session.activate()
+        session.setQuery("encode base64")
+        session.attach("\u{E9}")
+        await session.waitForIdle()
+        #expect(session.copyableOutput?.primaryText == "w6k=")
+        session.openSelected()
+        session.editInput("e\u{301}")
+        await session.waitForIdle()
+        #expect(session.copyPrimary() == .copied)
+        #expect(Array((clipboard.text ?? "").utf8) == Array("ZcyB".utf8))
+    }
+
+    /// Review P2: a paste that changes the selected command evaluated twice.
+    @Test func eachChangeEvaluatesOnce() async {
+        let counter = CountingEvaluator()
+        let session = PaletteSession(evaluator: counter, clipboard: MemoryClipboard(), preferences: MemoryPreferences())
+        session.editDebounce = .zero
+        session.activate()
+        await session.waitForIdle()
+        let before = await counter.calls.count
+        session.attach("<r><a/></r>")
+        await session.waitForIdle()
+        #expect(session.selectedID == "xml.format")
+        #expect(await counter.calls.count == before + 1)
+
+        session.attach("json format")
+        session.useAsSearchText()
+        await session.waitForIdle()
+        let afterSearch = await counter.calls.count
+        session.attach(#"{"a":1}"#)
+        await session.waitForIdle()
+        #expect(await counter.calls.count == afterSearch + 1)
+        session.clearInput()
+        await session.waitForIdle()
+        #expect(await counter.calls.count == afterSearch + 1, "Missing input needs no evaluator call")
+    }
+}

@@ -52,3 +52,12 @@ public enum TextLocator {
         return location(of: index, in: text)
     }
 }
+
+extension String {
+    /// Byte-for-byte UTF-8 equality. Swift's `==` uses canonical equivalence,
+    /// so "é" (U+00E9) equals "e" + U+0301 even though tools such as Base64
+    /// produce different output for them.
+    public func hasSameUTF8(as other: String) -> Bool {
+        utf8.elementsEqual(other.utf8)
+    }
+}

@@ -113,9 +113,11 @@ import Testing
     }
 
     @Test func decimal_from16_wrongPrefix() throws {
-        let result = try runResult("number.decimal", "0b11", options: ["from": "16"])
+        // With Read as Hex, "0b11" is the hex number 0x0B11; "0o" is still a mismatched prefix.
+        #expect(try runResult("number.decimal", "0b11", options: ["from": "16"]).output?.primaryText == "2833")
+        let result = try runResult("number.decimal", "0o17", options: ["from": "16"])
         if case .invalid(let diag) = result {
-            #expect(diag.message == "“0b” doesn’t match Read as Hex.")
+            #expect(diag.message == "“0o” doesn’t match Read as Hex.")
         } else {
             Issue.record("Expected invalid, got \(result)")
         }
@@ -287,5 +289,17 @@ import Testing
             Issue.record("Expected invalid"); return
         }
         #expect(second.location == TextLocation(line: 2, column: 3))
+    }
+}
+
+@Suite struct NumberExplicitHexTests {
+    /// Review P3: with Read as Hex, "0BEEF" is the hex number 0x0BEEF.
+    @Test func explicitHexReadsLeadingZeroBAsDigits() throws {
+        let command = try #require(NumberTools.commands.first { $0.id == "number.decimal" })
+        let result = command.run(ToolRequest(input: .text("0BEEF"), options: ToolOptions(["from": "16"])))
+        #expect(result.output?.primaryText == "48879")
+        // Auto still treats 0b as a binary prefix.
+        let auto = command.run(ToolRequest(input: .text("0b101")))
+        #expect(auto.output?.primaryText == "5")
     }
 }

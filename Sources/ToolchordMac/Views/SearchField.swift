@@ -45,7 +45,7 @@ struct SearchField: NSViewRepresentable {
         context.coordinator.onOpen = onOpen
         context.coordinator.onEscape = onEscape
         focus.searchField = field
-        if field.stringValue != session.query {
+        if !field.stringValue.hasSameUTF8(as: session.query) {
             field.stringValue = session.query
         }
         if let id = session.selectedID {

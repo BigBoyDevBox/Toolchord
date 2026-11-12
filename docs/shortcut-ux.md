@@ -8,7 +8,7 @@ Toolchord opens a single panel over the active app. Search finds a command, the 
 
 **Find.** The panel opens with search focused and a list of commands. Titles are verb-first ("Format JSON", "Convert to snake_case"), and aliases cover common words such as `pretty print`, `epoch`, `GUID`, `slugify`, and `sha256`. Footer hints show the keys that work right now.
 
-**Inspect.** ⌘V attaches the clipboard below search and shows `Pasted · JSON · 71 bytes` with a one-line excerpt. Commands that fit the input move to **Suggested for JSON**, and the preview beside the list shows the selected command's live result, its options, and a status. Clear (⇧⌘⌫ or the ✕ button) removes the attachment. When the pasted text names a command, **Use Input as Search Text** moves it into search.
+**Inspect.** ⌘V attaches the clipboard below search and shows only metadata such as `Pasted · JSON · 71 bytes`; the text itself appears in the tool's editor. Commands that fit the input move to **Suggested for JSON**, and the preview beside the list shows the selected command's live result, its options, and a status. Clear (⇧⌘⌫ or the ✕ button) removes the attachment. When the pasted text names a command, **Use Input as Search Text** moves it into search.
 
 **Edit.** Return opens the selected command in the same panel: input and result side by side for transforms, labeled fields with Copy buttons for inspectors, and the value with a Regenerate button for generators. Escape returns to search with the whole draft intact.
 

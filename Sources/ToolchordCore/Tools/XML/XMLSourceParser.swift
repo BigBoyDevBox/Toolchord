@@ -19,8 +19,13 @@ struct XMLSourceParser {
     struct Frame {
         let node: Int
         let name: String
-        let namespaces: [[UInt8]: String]
+        let namespaceUndo: [NamespaceUndo]
         let preserve: Bool
+    }
+
+    struct NamespaceUndo {
+        let prefix: [UInt8]
+        let previous: String?
     }
 
     struct Attribute {
@@ -48,6 +53,8 @@ struct XMLSourceParser {
     var nodes: [Node] = []
     var topLevel: [Int] = []
     var stack: [Frame] = []
+    // Only declarations made by an element are stored in its frame.
+    var namespaces: [[UInt8]: String] = [Array("xml".utf8): xmlURI]
     var hasRoot = false
     var hasBOM = false
     var nextCancellationCheck = 0
@@ -223,7 +230,12 @@ struct XMLSourceParser {
     mutating func processingInstruction() throws {
         let start = bytePosition
         try consume("<?")
+        let targetStart = bytePosition
         let target = try name(qname: false)
+        if let colon = target.utf8.firstIndex(of: 58) {
+            try fail("Processing instruction targets can’t contain “:”.",
+                     at: targetStart + target.utf8.distance(from: target.utf8.startIndex, to: colon))
+        }
         if target == "xml" {
             guard start == (hasBOM ? 3 : 0) else {
                 try fail("The XML declaration must be at the very start of the document.", at: start)
@@ -419,7 +431,7 @@ struct XMLSourceParser {
             let value = try attributeValue()
             attributes.append(Attribute(name: attributeName, value: value, start: attributeStart))
         }
-        var namespaces = stack.last?.namespaces ?? [Array("xml".utf8): Self.xmlURI]
+        var namespaceUndo: [NamespaceUndo] = []
         var preserve = stack.last?.preserve ?? false
         for attribute in attributes {
             let parts = Self.parts(attribute.name)
@@ -435,7 +447,8 @@ struct XMLSourceParser {
                 if !prefix.isEmpty && uri.isEmpty {
                     try fail("A namespace prefix must not be bound to an empty URI.", at: attribute.start)
                 }
-                namespaces[Array(prefix.utf8)] = uri
+                let key = Array(prefix.utf8)
+                namespaceUndo.append(NamespaceUndo(prefix: key, previous: namespaces.updateValue(uri, forKey: key)))
             }
             if attribute.name == "xml:space" {
                 if attribute.value == "preserve" { preserve = true }
@@ -464,7 +477,18 @@ struct XMLSourceParser {
         if stack.isEmpty { hasRoot = true }
         if !empty {
             nodes[index].structural = !preserve
-            stack.append(Frame(node: index, name: elementName, namespaces: namespaces, preserve: preserve))
+            stack.append(Frame(node: index, name: elementName, namespaceUndo: namespaceUndo, preserve: preserve))
+        } else {
+            try restoreNamespaces(namespaceUndo)
+        }
+    }
+
+    mutating func restoreNamespaces(_ undo: [NamespaceUndo]) throws {
+        for (index, binding) in undo.reversed().enumerated() {
+            if index & 2047 == 0, request.cancellation.isCancelled {
+                throw XMLSourceFailure(result: .cancelled)
+            }
+            namespaces[binding.prefix] = binding.previous
         }
     }
 
@@ -481,6 +505,7 @@ struct XMLSourceParser {
         nodes[frame.node].end = bytePosition
         if nodes[frame.node].children.isEmpty { nodes[frame.node].structural = false }
         stack.removeLast()
+        try restoreNamespaces(frame.namespaceUndo)
     }
 
     func formatted(indent: String) throws -> String {

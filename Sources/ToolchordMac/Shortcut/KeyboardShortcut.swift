@@ -113,7 +113,7 @@ public struct KeyboardShortcut: Codable, Hashable, Sendable {
 enum KeyNames {
     static func name(for keyCode: UInt32) -> String {
         if let special = specialNames[Int(keyCode)] { return special.symbol }
-        if let character = layoutCharacter(for: keyCode) { return character.uppercased() }
+        if let character = asciiCapableCharacter(for: keyCode) { return character.uppercased() }
         return "Key \(keyCode)"
     }
 
@@ -154,7 +154,7 @@ enum KeyNames {
     ]
 
     /// The character the key produces in the current ASCII-capable layout.
-    private static func layoutCharacter(for keyCode: UInt32) -> String? {
+    static func asciiCapableCharacter(for keyCode: UInt32) -> String? {
         guard let source = TISCopyCurrentASCIICapableKeyboardLayoutInputSource()?.takeRetainedValue(),
               let pointer = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else {
             return nil

@@ -13,13 +13,14 @@ Two mockups proposed a dark command palette: a list-only state after pasting JSO
 ## Kept
 
 - **Preview beside the list** (mockup 2). The core of the product: the selected command's live result is always visible, so the fast path needs no extra step.
-- **The pasted-input row with an excerpt.** Showing a one-line monospaced excerpt confirms what was pasted at a glance. The native row adds the source, the detected type, and the size: `Pasted · JSON · 71 bytes`.
 - **Icon chips and verb-first titles.** Monospaced glyphs (`{ }`, `64`, `%`, `#`) or SF Symbols in small rounded chips, with titles such as "Format JSON".
 - **⌘V hint in the search field**, now also a button that sends the same paste command.
 - **A status beside the preview** ("Valid JSON") and **a prominent copy button with its key** (⌘↵).
 - **Syntax-colored JSON**, extended to XML, with token colors that keep 4.5:1 contrast in both appearances.
 
 ## Changed
+
+- **The pasted-input row shows metadata only.** Mockup 1 showed the pasted text in a chip. A paste is often a token or secret being hashed or decoded, so the row shows the source, detected type, and size (`Pasted · JSON · 71 bytes`) and the text appears only in the tool's editor.
 
 - **Name the copy target.** "Copy & close" became **Copy JSON & Close**, **Copy claims & Close**, **Copy UTC time & Close**, and so on, so it is always clear what lands on the clipboard (inspectors have several candidates).
 - **"Tools · JSON input" became "Suggested for JSON" plus "Other tools".** Mockup 1 listed Decode URL, Decode Base64, and Convert Timestamp under "JSON input", although none of them applies to JSON. Suggestions now come from detection, with every other tool still reachable below.

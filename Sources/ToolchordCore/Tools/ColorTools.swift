@@ -407,15 +407,11 @@ public enum ColorTools {
     }
 
     static func formatHsl(_ r: Double, _ g: Double, _ b: Double, alpha a: Double) -> String {
-        // Compute HSL from the rounded 0-255 channels
-        let ri = Int(round(r * 255))
-        let gi = Int(round(g * 255))
-        let bi = Int(round(b * 255))
-        let rNorm = Double(ri) / 255.0
-        let gNorm = Double(gi) / 255.0
-        let bNorm = Double(bi) / 255.0
-
-        let (h, s, l) = rgbToHsl(rNorm, gNorm, bNorm)
+        // Convert from the unquantized channels: rounding to 8-bit first would
+        // erase hue and saturation for dark or desaturated colors, so
+        // hsl(30 1% 1%) would come back as hsl(0, 0%, 1.2%). Only hex and
+        // rgb() output quantize to 0–255.
+        let (h, s, l) = rgbToHsl(r, g, b)
 
         let hStr = formatOneDecimal(h)
         let sStr = formatOneDecimal(s)

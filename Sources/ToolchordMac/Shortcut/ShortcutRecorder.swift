@@ -49,6 +49,8 @@ final class ShortcutRecorderControl: NSControl {
     }
 
     override func accessibilityPerformPress() -> Bool {
+        // Take focus first, like a click, so the keystrokes reach the recorder.
+        window?.makeFirstResponder(self)
         isRecording ? cancelRecording() : startRecording()
         return true
     }

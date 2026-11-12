@@ -134,3 +134,85 @@ import ToolchordCore
         #expect(rect.maxY == primary.frame.height - 20)
     }
 }
+
+@MainActor
+@Suite struct EditorUndoTests {
+    /// Review P1: type, Clear Input, then ⌘Z used to raise NSRangeException.
+    @Test func externalReplacementKeepsUndoConsistent() throws {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 320, height: 200), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let (scrollView, textView) = CodeTextView.makeScrollable(editable: true)
+        window.contentView = scrollView
+        window.makeFirstResponder(textView)
+        let undoManager = try #require(textView.undoManager)
+        undoManager.groupsByEvent = false
+
+        // Typing over two events, then Clear Input in a third, as in the app.
+        // Before the fix, the second undo raised NSRangeException.
+        undoManager.beginUndoGrouping()
+        textView.insertText("sec", replacementRange: NSRange(location: NSNotFound, length: 0))
+        undoManager.endUndoGrouping()
+        undoManager.beginUndoGrouping()
+        textView.insertText("ret", replacementRange: NSRange(location: NSNotFound, length: 0))
+        undoManager.endUndoGrouping()
+        #expect(textView.string == "secret")
+
+        undoManager.beginUndoGrouping()
+        CodeTextView.replaceAllText(in: textView, with: "")
+        undoManager.endUndoGrouping()
+        #expect(textView.string.isEmpty)
+
+        undoManager.undo()
+        #expect(textView.string == "secret")
+        while undoManager.canUndo { undoManager.undo() }
+        #expect(textView.string.isEmpty)
+        undoManager.redo()
+        #expect(!textView.string.isEmpty)
+    }
+
+    @Test func replacementInTheSameEventAsTypingIsSafe() throws {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 320, height: 200), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let (scrollView, textView) = CodeTextView.makeScrollable(editable: true)
+        window.contentView = scrollView
+        window.makeFirstResponder(textView)
+        let undoManager = try #require(textView.undoManager)
+        undoManager.groupsByEvent = false
+        undoManager.beginUndoGrouping()
+        textView.insertText("secret", replacementRange: NSRange(location: NSNotFound, length: 0))
+        CodeTextView.replaceAllText(in: textView, with: "")
+        undoManager.endUndoGrouping()
+        undoManager.undo()
+        #expect(textView.string.isEmpty)
+    }
+}
+
+@MainActor
+@Suite struct PanelShortcutTests {
+    private func key(_ keyCode: Int, _ characters: String, _ flags: NSEvent.ModifierFlags = [.command]) throws -> NSEvent {
+        try #require(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: 0, context: nil,
+            characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: UInt16(keyCode)
+        ))
+    }
+
+    /// Review P2: on French AZERTY the key in the ANSI W position types "z".
+    @Test func azertyCommandZIsUndoNotClose() throws {
+        #expect(PalettePanel.shortcut(for: try key(kVK_ANSI_W, "z")) == .edit(Selector(("undo:"))))
+        #expect(PalettePanel.shortcut(for: try key(kVK_ANSI_Z, "w")) == .close)
+        #expect(PalettePanel.shortcut(for: try key(kVK_ANSI_Q, "a")) == .edit(#selector(NSText.selectAll(_:))))
+        #expect(PalettePanel.shortcut(for: try key(kVK_ANSI_W, "Z", [.command, .shift])) == .edit(Selector(("redo:"))))
+    }
+
+    @Test func usLayoutAndLayoutIndependentKeys() throws {
+        #expect(PalettePanel.shortcut(for: try key(kVK_ANSI_K, "k")) == .actions)
+        #expect(PalettePanel.shortcut(for: try key(kVK_ANSI_Comma, ",")) == .settings)
+        #expect(PalettePanel.shortcut(for: try key(kVK_Return, "\r")) == .copyAndClose)
+        #expect(PalettePanel.shortcut(for: try key(kVK_Return, "\r", [.command, .shift])) == .copyWithoutClosing)
+        #expect(PalettePanel.shortcut(for: try key(kVK_Delete, "\u{7f}", [.command, .shift])) == .clearInput)
+        #expect(PalettePanel.shortcut(for: try key(kVK_ANSI_K, "k", [])) == nil)
+        #expect(PalettePanel.shortcut(for: try key(kVK_Return, "\r", [])) == nil)
+    }
+}

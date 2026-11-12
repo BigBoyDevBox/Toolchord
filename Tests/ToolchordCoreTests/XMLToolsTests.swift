@@ -209,6 +209,54 @@ import Testing
         }
     }
 
+    @Test func processingInstructionTargetsAreNCNames() throws {
+        let fixtures: [(String, Int, Int)] = [
+            ("<?p:q?><r/>", 1, 4),
+            ("<?bad:target data?><r/>", 1, 6),
+            ("<r><?p:q x?></r>", 1, 7),
+            ("<r/>\n<?p:q?>", 2, 4),
+            ("<?:p?><r/>", 1, 3),
+            ("<?p:?><r/>", 1, 4),
+            ("<r>é🙂<?根:p?></r>", 1, 9),
+            ("<r/>\r\n<?p:q?>", 2, 4),
+            ("<r/>\r<?p:q?>", 2, 4),
+        ]
+        for (text, line, column) in fixtures {
+            try invalid(text, message: "Processing instruction targets can’t contain “:”.", line: line, column: column)
+        }
+        #expect(try run("<r><?ok data?></r>").output?.primaryText == "<r><?ok data?></r>")
+        #expect(try run("<r><?ok data?></r>", format: true).output?.primaryText == "<r>\n  <?ok data?>\n</r>")
+    }
+
+    @Test func namespaceScopesAreRestored() throws {
+        let input = "<r xmlns:p=\"urn:a\"><c xmlns:p=\"urn:b\"><p:x/></c><p:y/></r>"
+        #expect(try run(input).output?.primaryText == input)
+        #expect(try run(input, format: true).output?.primaryText == "<r xmlns:p=\"urn:a\">\n  <c xmlns:p=\"urn:b\">\n    <p:x/>\n  </c>\n  <p:y/>\n</r>")
+        try invalid("<r><c xmlns:p=\"urn:u\"/><p:x/></r>", message: "Undeclared namespace prefix “p”.", line: 1, column: 24)
+        try invalid("<r xmlns:p=\"urn:a\"><c xmlns:p=\"urn:b\" p:k=\"1\"/><d p:k=\"1\" xmlns:q=\"urn:a\" q:k=\"2\"/></r>", message: "Duplicate expanded attribute name “q:k”.")
+        // A non-empty child must also remove bindings that did not exist before it.
+        try invalid("<r><c xmlns:p='u'></c><p:x/></r>", message: "Undeclared namespace prefix “p”.", line: 1, column: 23)
+        // Multiple nested overrides must restore the original URI for attributes.
+        #expect(try run("<r xmlns:p='a'><c xmlns:p='b'><d xmlns:p='c'/></c><e xmlns:q='b' p:k='1' q:k='2'/></r>").isSuccess)
+    }
+
+    @Test func namespaceDeclarationScale() throws {
+        var root = "<r"
+        for index in 0..<20_000 { root += " xmlns:p\(index)=\"urn:\(index)\"" }
+        root += ">"
+        let child = "<c xmlns:p1=\"urn:x\"/>"
+        let input = root + String(repeating: child, count: 10_000) + "</r>"
+        let expected = root + String(repeating: "\n  " + child, count: 10_000) + "\n</r>"
+        for format in [false, true] {
+            let start = ContinuousClock.now
+            let result = try run(input, format: format)
+            let elapsed = start.duration(to: .now)
+            print("XML namespace scale (\(format ? "Format" : "Validate")): \(elapsed)")
+            #expect(elapsed < .seconds(2))
+            #expect(result.output?.primaryText == (format ? expected : input))
+        }
+    }
+
     @Test func oneMiBDocument() throws {
         // Exactly 1 MiB including markup. Its text is verbatim by definition.
         let input = "<a>" + String(repeating: "x", count: (1 << 20) - 7) + "</a>"

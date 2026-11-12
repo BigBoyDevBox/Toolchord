@@ -151,8 +151,13 @@ public enum URLTools {
                 schemeEnd += 1
             }
         }
-        let fullURL = schemeEnd > lower && schemeEnd + 2 < upper
-            && bytes[schemeEnd] == 58 && bytes[schemeEnd + 1] == 47 && bytes[schemeEnd + 2] == 47
+        // RFC 3986 §3: a URI is `scheme ":" hier-part`, and the "//" authority
+        // is optional (mailto:, data:, file:/path). A one-letter scheme needs
+        // "//", so drive paths such as "C:x" are not mistaken for URIs.
+        let colonAfterScheme = schemeEnd > lower && schemeEnd < upper && bytes[schemeEnd] == 58
+        let slashesFollow = schemeEnd + 2 < upper && bytes[schemeEnd + 1] == 47 && bytes[schemeEnd + 2] == 47
+        let hasScheme = colonAfterScheme && (schemeEnd - lower >= 2 || slashesFollow)
+        let fullURL = hasScheme && slashesFollow
         var fields = [ResultField]()
         func field(_ id: String, _ label: String, _ range: Range<Int>) {
             fields.append(ResultField(id: id, label: label, value: String(decoding: bytes[range], as: UTF8.self)))
@@ -196,11 +201,17 @@ public enum URLTools {
                 field("path", "Path", authorityEnd..<pathEnd)
             }
             if let fragment { field("fragment", "Fragment", (fragment + 1)..<upper) }
+        } else if hasScheme {
+            field("scheme", "Scheme", lower..<schemeEnd)
+            let pathStart = schemeEnd + 1
+            let pathEnd = question ?? contentEnd
+            if pathStart < pathEnd { field("path", "Path", pathStart..<pathEnd) }
+            if let fragment { field("fragment", "Fragment", (fragment + 1)..<upper) }
         }
         // Without a scheme, text whose first "=" or "&" comes before any "?"
         // is already a raw query (so "q=what?yes" keeps its "?").
         let queryStart: Int?
-        if fullURL {
+        if hasScheme {
             queryStart = question.map { $0 + 1 }
         } else if let marker = firstPairMarker, question.map({ marker < $0 }) ?? true {
             queryStart = lower

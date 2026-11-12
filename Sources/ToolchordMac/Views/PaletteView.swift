@@ -91,18 +91,12 @@ private struct AttachmentBar: View {
             Image(systemName: payload.source == .pasted ? "doc.on.clipboard" : "pencil")
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
+            // Metadata only: the pasted text itself may be a secret (for
+            // example a token being hashed), so it appears only in the editor.
             Text(label)
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .fixedSize()
-            Text(excerpt)
-                .font(.system(size: 11.5, design: .monospaced))
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(RoundedRectangle(cornerRadius: 6).fill(Theme.chip))
-                .accessibilityHidden(true)
             Spacer(minLength: 0)
             Button(action: onClear) {
                 Image(systemName: "xmark.circle.fill")
@@ -121,19 +115,6 @@ private struct AttachmentBar: View {
     private var label: String {
         let source = payload.source == .pasted ? "Pasted" : "Edited"
         return "\(source) · \(payload.profile.label) · \(ByteCountText.string(payload.byteCount))"
-    }
-
-    private var excerpt: String {
-        if payload.text.isEmpty { return "(empty)" }
-        var result = ""
-        for scalar in payload.text.unicodeScalars.prefix(160) {
-            switch scalar {
-            case "\n", "\r": result += " ↵ "
-            case "\t": result += " "
-            default: result.unicodeScalars.append(scalar)
-            }
-        }
-        return result
     }
 }
 

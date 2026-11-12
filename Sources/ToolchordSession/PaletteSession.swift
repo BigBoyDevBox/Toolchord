@@ -266,8 +266,7 @@ public final class PaletteSession {
     /// Attaches pasted text, replacing any attachment and keeping the query.
     public func attach(_ text: String) {
         payload = Payload(text: text, source: .pasted, limits: limits)
-        rebuildListing(.payload)
-        scheduleEvaluation()
+        if !rebuildListing(.payload) { scheduleEvaluation() }
     }
 
     /// Reports a paste that contained no text; the current payload is kept.
@@ -277,10 +276,10 @@ public final class PaletteSession {
 
     /// Replaces the payload with text edited in the tool's input editor.
     public func editInput(_ text: String) {
-        guard payload?.text != text else { return }
+        // Compare bytes: canonically equivalent edits can change tool output.
+        if let current = payload?.text, current.hasSameUTF8(as: text) { return }
         payload = Payload(text: text, source: .edited, limits: limits)
-        rebuildListing(.payload)
-        scheduleEvaluation(after: editDebounce)
+        if !rebuildListing(.payload) { scheduleEvaluation(after: editDebounce) }
     }
 
     /// Removes the attachment and immediately invalidates its result.
@@ -288,8 +287,7 @@ public final class PaletteSession {
         guard payload != nil else { return }
         payload = nil
         isActionsMenuOpen = false
-        rebuildListing(.payload)
-        scheduleEvaluation()
+        if !rebuildListing(.payload) { scheduleEvaluation() }
     }
 
     /// Moves short pasted text that names a command into search.
@@ -299,8 +297,7 @@ public final class PaletteSession {
         isActionsMenuOpen = false
         mode = .search
         query = text.trimmingCharacters(in: .whitespaces)
-        rebuildListing(.query)
-        scheduleEvaluation()
+        if !rebuildListing(.query) { scheduleEvaluation() }
     }
 
     // MARK: - Options and generated values
@@ -428,7 +425,10 @@ public final class PaletteSession {
         case payload
     }
 
-    private func rebuildListing(_ change: ListingChange, evaluate: Bool = true) {
+    /// Rebuilds the list and updates the selection. Returns whether it
+    /// scheduled an evaluation, so callers never schedule the same work twice.
+    @discardableResult
+    private func rebuildListing(_ change: ListingChange, evaluate: Bool = true) -> Bool {
         listing = CommandListing.make(query: query, profile: profile, catalog: catalog, recentIDs: preferences.recentCommandIDs)
         let previous = selectedID
 
@@ -452,11 +452,13 @@ public final class PaletteSession {
 
         guard evaluate else {
             needsActivation = true
-            return
+            return false
         }
         if selectedID != previous || change == .reset || needsActivation {
             selectionDidChange()
+            return true
         }
+        return false
     }
 
     /// An explicit selection survives new input unless that input has
@@ -522,8 +524,9 @@ public final class PaletteSession {
         evaluationTask = Task { [weak self] in
             if let delay {
                 try? await Task.sleep(for: delay)
-                if Task.isCancelled { return }
             }
+            // Superseded before it started: never hand stale work to the evaluator.
+            if Task.isCancelled { return }
             let result = await evaluator.evaluate(command, request)
             guard !Task.isCancelled, let self else { return }
             guard self.sessionID == identity.session, self.revision == identity.revision else { return }

@@ -4,7 +4,7 @@ Toolchord is a native macOS command palette for the small tasks developers do be
 
 The [shortcut UX](shortcut-ux.md) specifies panel behavior. The [implementation contracts](implementation-contracts.md) define results, copy targets, format rules, and fixtures. The [research](research.md) covers competitors, demand, and macOS constraints, and the [design review](design-review.md) explains how the proposed mockups shaped the final panel.
 
-**Status:** implemented. The app, its 52 commands, and 375 automated tests are in this repository; see the [README](../README.md) to build and run it.
+**Status:** implemented. The app, its 52 commands, and 388 automated tests are in this repository; see the [README](../README.md) to build and run it.
 
 ![Toolchord with pasted JSON: suggested tools on the left, a syntax-colored preview on the right, and Copy JSON & Close in the footer.](images/search-json.png)
 
@@ -34,7 +34,7 @@ One floating, non-activating panel (760 × 460 points, growing to 600 high for a
 
 ### Search with live preview
 
-Search is focused on open. Typing filters commands by name, alias, and tool family; ⌘V attaches the clipboard as input below the search field, showing its source, detected type, size, and a one-line excerpt. With input attached, commands that fit it appear under **Suggested for JSON** (or URL, JWT, and so on) ahead of **Other tools**; with nothing attached, recently used tools come first. The preview beside the list always shows the selected command's live result, its options, and a status such as **Valid JSON**.
+Search is focused on open. Typing filters commands by name, alias, and tool family; ⌘V attaches the clipboard as input below the search field, showing only its source, detected type, and size (the text itself appears in the tool's editor, so a pasted secret isn't on display while it is hashed or decoded). With input attached, commands that fit it appear under **Suggested for JSON** (or URL, JWT, and so on) ahead of **Other tools**; with nothing attached, recently used tools come first. The preview beside the list always shows the selected command's live result, its options, and a status such as **Valid JSON**.
 
 ### Expanded tool
 
@@ -57,7 +57,7 @@ Return opens the selected command in the same panel: an editable input (native u
 | **Escape** | Goes back from a tool to search with the draft intact; at the root, dismisses and discards the draft. Input methods get Escape and Return first while composing. |
 | **Tab** | Moves through controls in visible order; ⌥Tab inserts a tab character in the editor. |
 
-Tool input is processed on-device and kept in memory for the panel session only. Dismissal, Copy & Close, switching to another app, screen lock, sleep, user switching, and quitting all clear the draft and retire pending work. Preferences (shortcut, indentation, menu bar icon, recent command IDs) are stored separately and never include payloads, queries, or results. The app runs in the App Sandbox without the network entitlement, so pasted data cannot leave the Mac.
+Tool input is processed on-device and kept in memory for the panel session only. Dismissal, Copy & Close, switching to another app, screen lock, sleep, user switching, and quitting all clear the draft and retire pending work. Preferences (shortcut, indentation, menu bar icon, recent command IDs) are stored separately and never include payloads, queries, or results. The app runs in the App Sandbox without the network entitlement, so Toolchord itself cannot send pasted data anywhere; results the user copies go to the standard system clipboard, which macOS may share through Universal Clipboard.
 
 ## Implementation
 

@@ -74,6 +74,59 @@ final class PalettePanel: NSPanel {
         commandHandler?.escape()
     }
 
+    /// A keyboard command the panel handles itself.
+    enum Shortcut: Equatable {
+        case copyAndClose, copyWithoutClosing, actions, settings, regenerate, clearInput, close, find
+        /// A standard editing command sent to the first responder.
+        case edit(Selector)
+    }
+
+    /// Classifies a key-down event. Letters and punctuation are matched by the
+    /// character the active keyboard layout produces, not the physical key, so
+    /// ⌘Z on a French AZERTY keyboard (the key in the ANSI W position) is Undo,
+    /// not Close. Return and Delete are matched by key code.
+    static func shortcut(for event: NSEvent) -> Shortcut? {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.capsLock, .numericPad, .function])
+        let key = Int(event.keyCode)
+        if key == kVK_Return || key == kVK_ANSI_KeypadEnter {
+            switch flags {
+            case [.command]: return .copyAndClose
+            case [.command, .shift]: return .copyWithoutClosing
+            default: return nil
+            }
+        }
+        if key == kVK_Delete {
+            return flags == [.command, .shift] ? .clearInput : nil
+        }
+        guard let character = shortcutCharacter(for: event) else { return nil }
+        switch (flags, character) {
+        case ([.command], "k"): return .actions
+        case ([.command], ","): return .settings
+        case ([.command], "r"): return .regenerate
+        case ([.command], "w"): return .close
+        case ([.command], "f"): return .find
+        case ([.command], "x"): return .edit(#selector(NSText.cut(_:)))
+        case ([.command], "c"): return .edit(#selector(NSText.copy(_:)))
+        case ([.command], "v"): return .edit(#selector(NSText.paste(_:)))
+        case ([.command], "a"): return .edit(#selector(NSText.selectAll(_:)))
+        case ([.command], "z"): return .edit(Selector(("undo:")))
+        case ([.command, .shift], "z"): return .edit(Selector(("redo:")))
+        default: return nil
+        }
+    }
+
+    /// The lowercase character for a shortcut: what the active layout types,
+    /// or, for non-Latin layouts, the key's character in the ASCII-capable
+    /// layout (the same rule menus use for key equivalents).
+    static func shortcutCharacter(for event: NSEvent) -> String? {
+        if let characters = event.charactersIgnoringModifiers?.lowercased(),
+           characters.unicodeScalars.count == 1,
+           characters.unicodeScalars.allSatisfy(\.isASCII) {
+            return characters
+        }
+        return KeyNames.asciiCapableCharacter(for: UInt32(event.keyCode))?.lowercased()
+    }
+
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         guard event.type == .keyDown else { return super.performKeyEquivalent(with: event) }
         // While an input method is composing, its marked text is not part of
@@ -81,60 +134,27 @@ final class PalettePanel: NSPanel {
         if let textView = firstResponder as? NSTextView, textView.hasMarkedText() {
             return super.performKeyEquivalent(with: event)
         }
-        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask).subtracting([.capsLock, .numericPad, .function])
-        let key = Int(event.keyCode)
-        let isReturn = key == kVK_Return || key == kVK_ANSI_KeypadEnter
-
-        switch (flags, key) {
-        case ([.command], _) where isReturn:
-            commandHandler?.copyAndClose()
-            return true
-        case ([.command, .shift], _) where isReturn:
-            commandHandler?.copyWithoutClosing()
-            return true
-        case ([.command], kVK_ANSI_K):
-            commandHandler?.showActions()
-            return true
-        case ([.command], kVK_ANSI_Comma):
-            commandHandler?.openSettings()
-            return true
-        case ([.command], kVK_ANSI_R):
-            commandHandler?.regenerate()
-            return true
-        case ([.command, .shift], kVK_Delete):
-            commandHandler?.clearInput()
-            return true
-        case ([.command], kVK_ANSI_W):
-            commandHandler?.dismissPanel()
-            return true
-        default:
-            break
+        guard let shortcut = Self.shortcut(for: event) else { return super.performKeyEquivalent(with: event) }
+        switch shortcut {
+        case .copyAndClose: commandHandler?.copyAndClose()
+        case .copyWithoutClosing: commandHandler?.copyWithoutClosing()
+        case .actions: commandHandler?.showActions()
+        case .settings: commandHandler?.openSettings()
+        case .regenerate: commandHandler?.regenerate()
+        case .clearInput: commandHandler?.clearInput()
+        case .close: commandHandler?.dismissPanel()
+        case .find:
+            if super.performKeyEquivalent(with: event) { return true }
+            let item = NSMenuItem()
+            item.tag = NSTextFinder.Action.showFindInterface.rawValue
+            return NSApp.sendAction(#selector(NSResponder.performTextFinderAction(_:)), to: firstResponder, from: item)
+        case .edit(let action):
+            // Accessory apps may not route standard editing shortcuts through
+            // a main menu while another app is active; send them directly.
+            if super.performKeyEquivalent(with: event) { return true }
+            return NSApp.sendAction(action, to: nil, from: self)
         }
-
-        if super.performKeyEquivalent(with: event) { return true }
-
-        // Accessory apps may not route standard editing shortcuts through a
-        // main menu while another app is active; send them directly.
-        let editingAction: Selector?
-        switch (flags, key) {
-        case ([.command], kVK_ANSI_X): editingAction = #selector(NSText.cut(_:))
-        case ([.command], kVK_ANSI_C): editingAction = #selector(NSText.copy(_:))
-        case ([.command], kVK_ANSI_V): editingAction = #selector(NSText.paste(_:))
-        case ([.command], kVK_ANSI_A): editingAction = #selector(NSText.selectAll(_:))
-        case ([.command], kVK_ANSI_Z): editingAction = Selector(("undo:"))
-        case ([.command, .shift], kVK_ANSI_Z): editingAction = Selector(("redo:"))
-        case ([.command], kVK_ANSI_F): editingAction = #selector(NSResponder.performTextFinderAction(_:))
-        default: editingAction = nil
-        }
-        if let editingAction {
-            if editingAction == #selector(NSResponder.performTextFinderAction(_:)) {
-                let item = NSMenuItem()
-                item.tag = NSTextFinder.Action.showFindInterface.rawValue
-                return NSApp.sendAction(editingAction, to: firstResponder, from: item)
-            }
-            return NSApp.sendAction(editingAction, to: nil, from: self)
-        }
-        return false
+        return true
     }
 }
 

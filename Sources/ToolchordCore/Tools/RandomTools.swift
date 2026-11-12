@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// Random strings and lorem ipsum. Randomness is drawn once in `makeSeed`;
@@ -64,19 +65,32 @@ public enum RandomTools {
     static func evaluateString(_ request: ToolRequest) -> ToolResult {
         guard let seed = request.seed, let bytes = decodeHex(seed), bytes.count == seedByteCount else { return missingSeed }
         let length = Int(request.options.choice("length", default: "32")) ?? 32
+        let characters = request.options.choice("characters", default: "alnum")
         let alphabet: [Unicode.Scalar]
-        switch request.options.choice("characters", default: "alnum") {
+        switch characters {
         case "symbols": alphabet = symbols
         case "hex": alphabet = hexDigits
         default: alphabet = alphanumerics
         }
-        guard let text = map(bytes, to: alphabet, length: length) else { return missingSeed }
+        let stream = derivedBytes(seed: bytes, length: length, characters: characters)
+        guard let text = map(stream, to: alphabet, length: length) else { return missingSeed }
         let entropy = Int((Double(length) * log2(Double(alphabet.count))).rounded(.down))
         return .success(ToolOutput(
             primaryText: text,
             status: "\(length) characters",
             fields: [ResultField(id: "entropy", label: "Entropy", value: "\(entropy) bits", isCopyable: false, isMonospaced: false)]
         ))
+    }
+
+    /// An independent byte stream for one combination of options, derived
+    /// from the secret seed with HKDF-SHA256. The value stays stable while it
+    /// is on screen, but a value shown for one length or alphabet reveals
+    /// nothing about the value for another (a 16-character string is not the
+    /// prefix of the 64-character one).
+    static func derivedBytes(seed: [UInt8], length: Int, characters: String) -> [UInt8] {
+        let info = Data("toolchord.random.string;length=\(length);characters=\(characters)".utf8)
+        let key = HKDF<SHA256>.deriveKey(inputKeyMaterial: SymmetricKey(data: seed), info: info, outputByteCount: seedByteCount)
+        return key.withUnsafeBytes { Array($0) }
     }
 
     /// Unbiased mapping by rejection: bytes at or above the largest multiple

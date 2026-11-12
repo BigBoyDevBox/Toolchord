@@ -200,7 +200,8 @@ public enum NumberTools {
             let second = scalars[i + 1]
             if second == "x" || second == "X" {
                 detectedPrefix = "0x"; prefixBase = 16; i += 2
-            } else if second == "b" || second == "B" {
+            } else if (second == "b" || second == "B") && explicitBase != 16 {
+                // With Read as Hex, "0B…" is two hex digits, not a binary prefix.
                 detectedPrefix = "0b"; prefixBase = 2; i += 2
             } else if second == "o" || second == "O" {
                 detectedPrefix = "0o"; prefixBase = 8; i += 2

@@ -56,6 +56,27 @@ final class CodeTextView: NSTextView {
         window?.selectPreviousKeyView(self)
     }
 
+    /// Replaces all text as one undoable change. Assigning `string` directly
+    /// would leave earlier typing in the undo stack pointing at ranges that
+    /// no longer exist, so a later ⌘Z raises `NSRangeException`.
+    static func replaceAllText(in textView: NSTextView, with text: String) {
+        let range = NSRange(location: 0, length: (textView.string as NSString).length)
+        textView.breakUndoCoalescing()
+        if textView.allowsUndo, textView.isEditable, textView.shouldChangeText(in: range, replacementString: text) {
+            // Its own undo group, so it stays a separate step even if it lands
+            // in the same event as typing.
+            let undoManager = textView.undoManager
+            undoManager?.beginUndoGrouping()
+            textView.replaceCharacters(in: range, with: text)
+            textView.didChangeText()
+            undoManager?.endUndoGrouping()
+        } else {
+            textView.undoManager?.removeAllActions(withTarget: textView)
+            if let storage = textView.textStorage { textView.undoManager?.removeAllActions(withTarget: storage) }
+            textView.string = text
+        }
+    }
+
     static func makeScrollable(editable: Bool) -> (NSScrollView, CodeTextView) {
         let scrollView = NSTextView.scrollableTextView()
         scrollView.drawsBackground = false
@@ -125,24 +146,34 @@ struct InputEditor: NSViewRepresentable {
         context.coordinator.onChange = onChange
         guard let textView = scrollView.documentView as? CodeTextView else { return }
         focus.inputEditor = textView
-        // Only replace the text when it changed outside the editor, so typing
-        // never loses the caret or undo history.
-        if text != context.coordinator.lastText && text != textView.string {
-            textView.string = text
-            context.coordinator.lastText = text
+        // Only replace the text when it changed outside the editor (for
+        // example Clear Input), so typing never loses the caret. Compare bytes,
+        // not canonically equivalent strings.
+        if !text.hasSameUTF8(as: context.coordinator.lastText) && !text.hasSameUTF8(as: textView.string) {
+            context.coordinator.applyExternalText(text, to: textView)
         }
     }
 
+    @MainActor
     final class Coordinator: NSObject, NSTextViewDelegate {
         var onChange: (String) -> Void
         var lastText = ""
+        private var isApplyingExternalText = false
 
         init(onChange: @escaping (String) -> Void) {
             self.onChange = onChange
         }
 
+        /// Shows text that changed in the session without echoing it back.
+        func applyExternalText(_ text: String, to textView: NSTextView) {
+            isApplyingExternalText = true
+            defer { isApplyingExternalText = false }
+            CodeTextView.replaceAllText(in: textView, with: text)
+            lastText = text
+        }
+
         func textDidChange(_ notification: Notification) {
-            guard let textView = notification.object as? NSTextView, !textView.hasMarkedText() else { return }
+            guard !isApplyingExternalText, let textView = notification.object as? NSTextView, !textView.hasMarkedText() else { return }
             lastText = textView.string
             onChange(textView.string)
         }
@@ -175,7 +206,7 @@ struct ResultTextView: NSViewRepresentable {
     }
 
     private func apply(to textView: CodeTextView, coordinator: Coordinator) {
-        if coordinator.text != text || coordinator.syntax != syntax {
+        if !(coordinator.text.map { $0.hasSameUTF8(as: text) } ?? false) || coordinator.syntax != syntax {
             coordinator.text = text
             coordinator.syntax = syntax
             textView.textStorage?.setAttributedString(SyntaxHighlighter.attributedString(for: text, syntax: syntax))

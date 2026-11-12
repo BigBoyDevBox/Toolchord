@@ -174,3 +174,39 @@ import Testing
         #expect(try inspect("https://x.test/p?q=a?b").primaryText == "[\n  {\"name\": \"q\", \"value\": \"a?b\"}\n]")
     }
 }
+
+@Suite struct URLSchemeWithoutAuthorityTests {
+    private func inspect(_ text: String) throws -> ToolOutput {
+        let command = try #require(URLTools.commands.first { $0.id == "url.inspect" })
+        return try #require(command.run(ToolRequest(input: .text(text))).output)
+    }
+
+    private func value(_ output: ToolOutput, _ id: String) -> String? {
+        output.fields.first { $0.id == id }?.value
+    }
+
+    @Test func mailtoSplitsPathAndQuery() throws {
+        let output = try inspect("mailto:foo=bar@example.com?subject=Hello")
+        #expect(output.primaryText == "[\n  {\"name\": \"subject\", \"value\": \"Hello\"}\n]")
+        #expect(value(output, "scheme") == "mailto")
+        #expect(value(output, "path") == "foo=bar@example.com")
+        #expect(value(output, "host") == nil)
+        let plain = try inspect("mailto:dev@example.com?subject=Hello")
+        #expect(value(plain, "scheme") == "mailto")
+        #expect(value(plain, "path") == "dev@example.com")
+    }
+
+    @Test func dataAndFileURIsHaveNoInventedParameters() throws {
+        let data = try inspect("data:text/plain;base64,SGVsbG8=")
+        #expect(data.primaryText == "[]")
+        #expect(value(data, "path") == "text/plain;base64,SGVsbG8=")
+        let file = try inspect("file:/tmp/a=b")
+        #expect(file.primaryText == "[]")
+        #expect(value(file, "path") == "/tmp/a=b")
+    }
+
+    @Test func rawQueriesAndDrivePathsAreNotSchemes() throws {
+        #expect(try inspect("q=a:b").primaryText == "[\n  {\"name\": \"q\", \"value\": \"a:b\"}\n]")
+        #expect(value(try inspect("C:x=1"), "scheme") == nil)
+    }
+}

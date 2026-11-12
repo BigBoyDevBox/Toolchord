@@ -150,7 +150,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let view = WelcomeView(
                 model: model,
                 onTry: { [weak self] in
-                    self?.welcomeWindow?.orderOut(nil)
+                    // Trying it counts as finishing onboarding; the window
+                    // would otherwise be unreachable after the palette closes.
+                    self?.finishWelcome()
                     self?.panelController.showOrFocus()
                 },
                 onDone: { [weak self] in self?.finishWelcome() }

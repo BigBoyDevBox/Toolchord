@@ -16,16 +16,17 @@ import Testing
         bytes.map { String(format: "%02x", $0) }.joined()
     }
 
-    @Test func zeroBytesMapToTheFirstCharacter() throws {
-        let zeros = hexSeed(Array(repeating: 0, count: 512))
-        #expect(try string(seed: zeros, options: ["length": "16", "characters": "alnum"]).primaryText == "AAAAAAAAAAAAAAAA")
-        #expect(try string(seed: zeros, options: ["length": "32", "characters": "hex"]).primaryText == String(repeating: "0", count: 32))
+    @Test func zeroBytesMapToTheFirstCharacter() {
+        let zeros = [UInt8](repeating: 0, count: 512)
+        #expect(RandomTools.map(zeros, to: RandomTools.alphanumerics, length: 16) == "AAAAAAAAAAAAAAAA")
+        #expect(RandomTools.map(zeros, to: RandomTools.hexDigits, length: 32) == String(repeating: "0", count: 32))
     }
 
-    @Test func biasedBytesAreRejected() throws {
+    @Test func biasedBytesAreRejected() {
         // 255 ≥ 248 (the largest multiple of 62 below 256), so it is skipped.
-        let seed = hexSeed([0xFF] + Array(repeating: 0x01, count: 511))
-        #expect(try string(seed: seed, options: ["length": "16", "characters": "alnum"]).primaryText == "BBBBBBBBBBBBBBBB")
+        let bytes: [UInt8] = [0xFF] + [UInt8](repeating: 0x01, count: 511)
+        #expect(RandomTools.map(bytes, to: RandomTools.alphanumerics, length: 16) == "BBBBBBBBBBBBBBBB")
+        #expect(RandomTools.map([0xFF, 0xFF], to: RandomTools.alphanumerics, length: 1) == nil)
     }
 
     @Test func symbolsAlphabetAndEntropy() throws {
@@ -47,11 +48,16 @@ import Testing
         #expect(result.output?.fields.first?.value == "190 bits")
     }
 
-    @Test func changingOptionsRemapsTheSameSeed() throws {
+    /// Review P2: a value copied at one length must not reveal the value at another.
+    @Test func optionChangesGiveIndependentValues() throws {
         let seed = try command("random.string").makeSeed!(SeedContext())
-        let short = try string(seed: seed, options: ["length": "16"]).primaryText
-        let long = try string(seed: seed, options: ["length": "64"]).primaryText
-        #expect(long.hasPrefix(short))
+        let long = try string(seed: seed, options: ["length": "64", "characters": "hex"]).primaryText
+        let short = try string(seed: seed, options: ["length": "16", "characters": "hex"]).primaryText
+        #expect(!long.hasPrefix(short))
+        let alphanumeric = try string(seed: seed, options: ["length": "16", "characters": "alnum"]).primaryText
+        #expect(alphanumeric != short)
+        // The same options give the same value, so it stays stable on screen.
+        #expect(try string(seed: seed, options: ["length": "64", "characters": "hex"]).primaryText == long)
     }
 
     @Test func seedsAreSecureLengthAndDistinct() throws {

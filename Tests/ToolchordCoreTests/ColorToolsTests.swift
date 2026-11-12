@@ -268,11 +268,12 @@ import Testing
     // MARK: - Edge cases
 
     @Test func hslFractionalValues() throws {
-        // hsl(210.5, 33.3%, 40%) → RGB → HSL round-trip may shift hue slightly
-        // due to 0-255 channel rounding. Verify the output is valid HSL format.
-        let output = try run("color.hsl", "hsl(210.5, 33.3%, 40%)")
-        #expect(output.primaryText.hasPrefix("hsl("))
-        #expect(output.primaryText.hasSuffix("%)"))
+        // HSL output is computed from unquantized channels, so HSL input round-trips.
+        #expect(try run("color.hsl", "hsl(210.5, 33.3%, 40%)").primaryText == "hsl(210.5, 33.3%, 40%)")
+        // Review P2: 8-bit rounding used to erase hue and saturation here.
+        #expect(try run("color.hsl", "hsl(30 1% 1%)").primaryText == "hsl(30, 1%, 1%)")
+        // Hex input is exact in 8 bits, so it is unaffected.
+        #expect(try run("color.hsl", "#ff8800").primaryText == "hsl(32, 100%, 50%)")
     }
 
     @Test func rgbZero() throws {
