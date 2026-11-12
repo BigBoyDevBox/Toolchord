@@ -2,6 +2,8 @@
 
 The [product plan](product-plan.md) already has the right shape: one panel, a preview, an expanded editor, and Copy & Close. This proposal resolves interaction details and adds a [clickable prototype](prototype/index.html). It is a design study for a native Mac app; the HTML is not a proposed app runtime.
 
+![Toolchord design prototype showing command search, attached JSON input, a selected formatter, its preview, and Copy JSON & Close.](prototype/preview.png)
+
 ## One panel, three levels of attention
 
 **Find.** Open a compact panel with search focused and six or fewer visible command rows. Display verb-first commands, short aliases, and a quiet footer of key hints. No dashboard, permanent category sidebar, or recent payloads. Keep the top edge and search field in place when expanding. Start around 680 points wide, constrained to the current screen's visible frame; these dimensions are proposed, not a platform requirement.
