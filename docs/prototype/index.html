@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Toolchord — shortcut interaction study</title>
+  <link rel="stylesheet" href="prototype.css">
+  <script src="prototype.js" defer></script>
+</head>
+<body>
+  <main>
+    <header class="study-header">
+      <div><p class="eyebrow">TOOLCHORD / INTERACTION STUDY</p><h1>A small interruption.<br>A useful result.</h1></div>
+      <p>Find a command, inspect a preview,<br>then get back to work.</p>
+    </header>
+    <nav class="scenarios" aria-label="Demo scenarios">
+      <button type="button" id="sample">Load JSON sample</button>
+      <button type="button" id="invalid">Load invalid JSON</button>
+      <button type="button" id="uuid-scenario">Generate UUID</button>
+      <button type="button" id="reset">Reset</button>
+    </nav>
+    <section class="desktop" aria-label="Palette preview">
+      <div class="desktop-context" aria-hidden="true"><span>workspace / api-response.json</span><code>const response = await fetch(endpoint);<br>const data = await response.json();</code></div>
+      <section class="palette" aria-label="Toolchord command palette" id="palette">
+        <header class="palette-header"><span class="app-mark" aria-hidden="true">tc</span><strong>Toolchord</strong><span class="local">On-device</span></header>
+        <div id="root-view">
+          <label class="search-label" for="search">Find a tool <span>or paste input · ⌘V</span></label>
+          <input id="search" autocomplete="off" spellcheck="false" placeholder="Search tools…" role="combobox" aria-autocomplete="list" aria-controls="commands" aria-expanded="true">
+          <div class="attachment" id="attachment" hidden><span id="attachment-label"></span><button type="button" id="clear">Clear input</button></div>
+          <div class="workbench">
+            <div class="command-side"><p class="section-label">COMMANDS</p><div id="commands" role="listbox" aria-label="Tools"></div><button id="clear-query" type="button" hidden>Clear search</button></div>
+            <section class="preview-side" aria-label="Selected command preview"><div class="preview-heading"><span id="preview-title">Preview</span><span id="status"></span></div><pre id="preview"></pre><p id="preview-error" class="error" role="alert" hidden></p></section>
+          </div>
+        </div>
+        <div id="tool-view" hidden>
+          <div class="tool-title"><button type="button" id="back">‹ Tools</button><strong id="tool-title"></strong></div>
+          <div class="editors" id="editors"><label id="input-label">Input<textarea id="editor" spellcheck="false"></textarea></label><section class="result-editor" aria-label="Tool result"><div class="preview-heading"><span>Result</span><span id="tool-status"></span></div><pre id="tool-output"></pre><p class="error" id="tool-error" role="alert" hidden></p><button type="button" id="regenerate" hidden>Regenerate UUID</button></section></div>
+        </div>
+        <footer><span id="key-hints">↑↓ Navigate · ↵ Open</span><div class="footer-actions"><button type="button" id="actions" aria-expanded="false" aria-controls="action-menu">Actions <kbd>⌘K</kbd></button><button type="button" id="copy" class="primary" disabled>Copy JSON & Close <kbd>⌘↵</kbd></button></div></footer>
+        <div id="action-menu" class="action-menu" hidden aria-label="Contextual actions"><button type="button" id="copy-stay">Copy without closing</button><button type="button" id="as-search">Use as search text</button><button type="button" id="menu-clear">Clear input</button><button type="button" id="menu-regenerate">Regenerate UUID</button></div>
+      </section>
+      <section id="closed" class="closed" hidden><span class="app-mark" aria-hidden="true">tc</span><h2>Back to your work.</h2><p id="closed-message"></p><button type="button" id="reopen">Reopen Toolchord</button></section>
+    </section>
+    <p class="demo-note" id="announcement" role="status" aria-live="polite">Design prototype · JSON and UUID only · Copy and dismissal are simulated; the system clipboard is unchanged.</p>
+    <p class="demo-note"><a href="../shortcut-ux.md">Read the interaction proposal</a> · Shortcut registration, Mac focus return, and OS paste permissions require a native spike.</p>
+  </main>
+</body>
+</html>
