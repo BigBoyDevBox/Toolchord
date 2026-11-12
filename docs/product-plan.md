@@ -10,7 +10,7 @@ The [shortcut UX](shortcut-ux.md) specifies panel behavior. The [implementation 
 
 ## First release
 
-Seven core tools from the original plan, plus the consensus tools that research showed fit the same paste → preview → copy flow:
+Seven core tools from the original plan, plus the consensus tools that research showed fit the same paste → preview → copy flow. **Scope decision (12 November 2026):** the first release ships every family below; the original seven remain the core workflows for the [validation study](research.md#validation-before-catalog-expansion).
 
 | Tool | Commands and result |
 | --- | --- |
