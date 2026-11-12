@@ -70,7 +70,12 @@ public final class AppPreferences: SessionPreferences {
             Key.remembersRecents: true,
             Key.showsMenuBarIcon: true,
         ])
-        if let data = defaults.data(forKey: Key.shortcut), let stored = try? JSONDecoder().decode(KeyboardShortcut.self, from: data) {
+        // A shortcut stored by an older build may now be reserved (for example
+        // a palette command key); fall back rather than register a hotkey that
+        // shadows the panel.
+        if let data = defaults.data(forKey: Key.shortcut),
+           let stored = try? JSONDecoder().decode(KeyboardShortcut.self, from: data),
+           stored.problem == nil {
             shortcut = stored
         } else {
             shortcut = .defaultShortcut
