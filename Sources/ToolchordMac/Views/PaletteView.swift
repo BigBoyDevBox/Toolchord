@@ -295,7 +295,32 @@ private struct ToolHeader: View {
     let actions: PaletteActions
 
     var body: some View {
-        HStack(spacing: 10) {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                title
+                Spacer(minLength: 8)
+                OptionsBar(session: session, command: command)
+            }
+            // Measure the whole row before allowing the title or option
+            // labels to compress. Dense options get their own row below.
+            .fixedSize(horizontal: true, vertical: false)
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    title
+                    Spacer(minLength: 0)
+                }
+                OptionsBar(session: session, command: command)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(minHeight: 58)
+    }
+
+    private var title: some View {
+        Group {
             Button(action: actions.back) {
                 Label("Tools", systemImage: "chevron.left")
                     .font(.system(size: 12.5))
@@ -306,11 +331,7 @@ private struct ToolHeader: View {
             Text(command.title)
                 .font(.system(size: 15, weight: .semibold))
                 .lineLimit(1)
-            Spacer(minLength: 8)
-            OptionsBar(session: session, command: command)
         }
-        .padding(.horizontal, 16)
-        .frame(height: 58)
     }
 }
 
@@ -774,35 +795,49 @@ private struct OptionsBar: View {
 
     var body: some View {
         if !command.options.isEmpty {
-            let options = session.options(for: command.id)
-            HStack(spacing: 12) {
-                ForEach(command.options) { option in
-                    switch option.kind {
-                    case .choice(let choices, let defaultID):
-                        Picker(option.label, selection: Binding(
-                            get: { options.choice(option.id, default: defaultID) },
-                            set: { session.setOption(option.id, to: $0, for: command.id) }
-                        )) {
-                            ForEach(choices) { choice in
-                                Text(choice.label).tag(choice.id)
-                            }
+            ViewThatFits(in: .horizontal) {
+                optionRow(presentation: .segments)
+                optionRow(presentation: .menus)
+            }
+        }
+    }
+
+    private enum Presentation { case segments, menus }
+
+    private func optionRow(presentation: Presentation) -> some View {
+        let options = session.options(for: command.id)
+        return HStack(spacing: 12) {
+            ForEach(command.options) { option in
+                switch option.kind {
+                case .choice(let choices, let defaultID):
+                    let picker = Picker(option.label, selection: Binding(
+                        get: { options.choice(option.id, default: defaultID) },
+                        set: { session.setOption(option.id, to: $0, for: command.id) }
+                    )) {
+                        ForEach(choices) { choice in
+                            Text(choice.label).tag(choice.id)
                         }
-                        .pickerStyle(.segmented)
-                        .fixedSize()
-                        .controlSize(.small)
-                        .help(option.label)
-                    case .toggle(let defaultValue):
-                        Toggle(option.label, isOn: Binding(
-                            get: { options.flag(option.id, default: defaultValue) },
-                            set: { session.setOption(option.id, to: $0 ? "true" : "false", for: command.id) }
-                        ))
-                        .toggleStyle(.checkbox)
-                        .controlSize(.small)
-                        .font(.system(size: 11.5))
                     }
+                    .controlSize(.small)
+                    .help(option.label)
+                    .accessibilityLabel(option.label)
+
+                    switch presentation {
+                    case .segments: picker.pickerStyle(.segmented)
+                    case .menus: picker.pickerStyle(.menu)
+                    }
+                case .toggle(let defaultValue):
+                    Toggle(option.label, isOn: Binding(
+                        get: { options.flag(option.id, default: defaultValue) },
+                        set: { session.setOption(option.id, to: $0 ? "true" : "false", for: command.id) }
+                    ))
+                    .toggleStyle(.checkbox)
+                    .controlSize(.small)
+                    .font(.system(size: 11.5))
                 }
             }
         }
+        .fixedSize(horizontal: true, vertical: false)
     }
 }
 
