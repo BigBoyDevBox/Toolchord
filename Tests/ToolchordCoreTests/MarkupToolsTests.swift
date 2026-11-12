@@ -58,6 +58,26 @@ import Testing
         Fixture(command: "markdown.plaintext", input: "before <img alt=\"Logo\" src=\"x\"> after", expected: "before [Logo] after", links: false),
         Fixture(command: "markdown.plaintext", input: "see <a href=\"https://e.com\">docs</a> now", expected: "see docs (https://e.com) now", links: true),
         Fixture(command: "html.plaintext", input: "<template><textarea></template>hidden</textarea></template>shown", expected: "shown", links: false),
+        // Follow-up review: content the page doesn't render stays out.
+        Fixture(command: "html.plaintext", input: "<p>visible <span hidden>secret</span> text</p>", expected: "visible text", links: false),
+        Fixture(command: "html.plaintext", input: "<div style=\"DISPLAY : None; max-height: 0\">Preheader</div><p>Body</p>", expected: "Body", links: false),
+        Fixture(command: "html.plaintext", input: "<p>a <img hidden alt=\"x\">b <img alt=\"y\"></p>", expected: "a b [y]", links: false),
+        Fixture(command: "html.plaintext", input: "<span hidden>a<span>b</span>c</span>d<p hidden=\"until-found\">e</p>f", expected: "df", links: false),
+        Fixture(command: "html.plaintext", input: "<textarea hidden>secret</textarea>shown", expected: "shown", links: false),
+        Fixture(command: "html.plaintext", input: "<span style=\"display:none&#10;!important\">secret</span>visible", expected: "visible", links: false),
+        Fixture(command: "html.plaintext", input: "<span style=\"--display:none\">a</span> <span style=\"display:none; display: block\">b</span> <span style=\"display:block;DISPLAY:none !important\">c</span>", expected: "a b", links: false),
+        Fixture(command: "markdown.plaintext", input: "safe <script>secret</script> end", expected: "safe end", links: false),
+        Fixture(command: "markdown.plaintext", input: "a <span hidden>b <em>c</em> <span>d</span></span> e <style>p { color: red }</style> f", expected: "a e f", links: false),
+        Fixture(command: "markdown.plaintext", input: "safe <script>[x](https://e.com)</script> end <img hidden alt=\"Logo\">", expected: "safe end", links: true),
+        // Tags in raw text don't end or nest skipped elements.
+        Fixture(command: "markdown.plaintext", input: "a <span hidden><script>\"</span>\"</script>secret</span> b", expected: "a b", links: false),
+        Fixture(command: "markdown.plaintext", input: "a <script>x<script>y</script> c", expected: "a c", links: false),
+        Fixture(command: "markdown.plaintext", input: "a <span hidden><textarea><!-- </textarea> --></span> b", expected: "a b", links: false),
+        Fixture(command: "markdown.plaintext", input: "a <SCRIPT>x</Script > c", expected: "a c", links: false),
+        // Follow-up review: list items and nested tables inside table cells.
+        Fixture(command: "html.plaintext", input: "<table><tr><td><ol><li>a</li><li>b</li></ol></td><td>c</td></tr></table>", expected: "1. a 2. b\tc", links: false),
+        Fixture(command: "html.plaintext", input: "<table><tr><td>a<table><tr><td>x</td><td>y</td></tr><tr><td>z</td></tr></table></td><td>b</td></tr></table>", expected: "a x y z\tb", links: false),
+        Fixture(command: "html.plaintext", input: "<table><tr><td><table><tr><td>in</td></tr></table>after</td><td>b</td></tr><tr><td>2</td><td>3</td></tr></table><table><tr><td>next</td></tr></table>", expected: "in after\tb\n2\t3\n\nnext", links: false),
         // A reference image inside a link can't be re-parsed alone: keep the flat text.
         Fixture(command: "markdown.html", input: "x [![a][r]](u)\n\n[r]: i.png", expected: "<p>x <a href=\"u\">a</a></p>", links: false),
         Fixture(command: "markdown.html", input: "[![Build](b.svg)](https://ci)", expected: "<p><a href=\"https://ci\"><img src=\"b.svg\" alt=\"Build\" /></a></p>", links: false),

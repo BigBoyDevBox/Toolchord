@@ -351,7 +351,9 @@ import Testing
         let elapsed = try ContinuousClock().measure { output = try run(largeInput) }
 
         #expect(output?.primaryText.isEmpty == false)
-        #expect(elapsed < .seconds(1), "Should complete in under 1 second, took \(elapsed)")
+        // About 0.2 s alone in a debug build; the bound is generous for
+        // parallel runs and still catches quadratic behavior.
+        #expect(elapsed < .seconds(5), "Should complete in under 5 seconds, took \(elapsed)")
     }
 
     // MARK: - Cancellation

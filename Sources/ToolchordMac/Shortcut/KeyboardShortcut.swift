@@ -46,7 +46,7 @@ public struct KeyboardShortcut: Codable, Hashable, Sendable {
 
     /// Modifier symbols in Apple's order (⌃⌥⇧⌘) followed by the key, such as "⌥⇧Space".
     public var displayString: String {
-        modifierSymbols + KeyNames.name(for: keyCode)
+        modifierSymbols + KeyNames.name(for: keyCode, commandState: modifierFlags.contains(.command))
     }
 
     public var modifierSymbols: String {
@@ -65,7 +65,7 @@ public struct KeyboardShortcut: Codable, Hashable, Sendable {
         if carbonModifiers & UInt32(optionKey) != 0 { words.append("Option") }
         if carbonModifiers & UInt32(shiftKey) != 0 { words.append("Shift") }
         if carbonModifiers & UInt32(cmdKey) != 0 { words.append("Command") }
-        words.append(KeyNames.spokenName(for: keyCode))
+        words.append(KeyNames.spokenName(for: keyCode, commandState: modifierFlags.contains(.command)))
         return words.joined(separator: " ")
     }
 
@@ -90,7 +90,7 @@ public struct KeyboardShortcut: Codable, Hashable, Sendable {
     }
 
     public var problem: Problem? {
-        validationProblem(character: KeyNames.asciiCapableCharacter(for: keyCode))
+        validationProblem(character: KeyNames.asciiCapableCharacter(for: keyCode, commandState: modifierFlags.contains(.command)))
     }
 
     /// Letter reservations follow the layout used for the shortcut's label,
@@ -119,15 +119,17 @@ public struct KeyboardShortcut: Codable, Hashable, Sendable {
 
 /// Human-readable key names for Carbon virtual key codes.
 enum KeyNames {
-    static func name(for keyCode: UInt32) -> String {
+    /// `commandState` names the key as the layout types it with ⌘ held,
+    /// which differs on layouts such as Dvorak – QWERTY ⌘.
+    static func name(for keyCode: UInt32, commandState: Bool = false) -> String {
         if let special = specialNames[Int(keyCode)] { return special.symbol }
-        if let character = asciiCapableCharacter(for: keyCode) { return character.uppercased() }
+        if let character = asciiCapableCharacter(for: keyCode, commandState: commandState) { return character.uppercased() }
         return "Key \(keyCode)"
     }
 
-    static func spokenName(for keyCode: UInt32) -> String {
+    static func spokenName(for keyCode: UInt32, commandState: Bool = false) -> String {
         if let special = specialNames[Int(keyCode)] { return special.spoken }
-        return name(for: keyCode)
+        return name(for: keyCode, commandState: commandState)
     }
 
     static func isFunctionKey(_ keyCode: UInt32) -> Bool {
@@ -161,12 +163,17 @@ enum KeyNames {
         kVK_F17: ("F17", "F17"), kVK_F18: ("F18", "F18"), kVK_F19: ("F19", "F19"), kVK_F20: ("F20", "F20"),
     ]
 
-    /// The character the key produces in the current ASCII-capable layout.
-    static func asciiCapableCharacter(for keyCode: UInt32) -> String? {
-        guard let source = TISCopyCurrentASCIICapableKeyboardLayoutInputSource()?.takeRetainedValue(),
-              let pointer = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else {
-            return nil
-        }
+    /// The character the key produces in the current ASCII-capable layout,
+    /// with ⌘ held when `commandState` is set (the mapping menus use for
+    /// ⌘ key equivalents).
+    static func asciiCapableCharacter(for keyCode: UInt32, commandState: Bool = false) -> String? {
+        guard let source = TISCopyCurrentASCIICapableKeyboardLayoutInputSource()?.takeRetainedValue() else { return nil }
+        return character(for: keyCode, commandState: commandState, in: source)
+    }
+
+    /// The character `keyCode` produces in the keyboard layout `source`.
+    static func character(for keyCode: UInt32, commandState: Bool, in source: TISInputSource) -> String? {
+        guard let pointer = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else { return nil }
         let layoutData = Unmanaged<CFData>.fromOpaque(pointer).takeUnretainedValue() as Data
         var deadKeyState: UInt32 = 0
         var length = 0
@@ -177,7 +184,7 @@ enum KeyNames {
                 layout,
                 UInt16(keyCode),
                 UInt16(kUCKeyActionDisplay),
-                0,
+                commandState ? UInt32((cmdKey >> 8) & 0xFF) : 0,
                 UInt32(LMGetKbdType()),
                 OptionBits(kUCKeyTranslateNoDeadKeysBit),
                 &deadKeyState,

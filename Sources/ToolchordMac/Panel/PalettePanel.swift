@@ -115,16 +115,21 @@ final class PalettePanel: NSPanel {
         }
     }
 
-    /// The lowercase character for a shortcut: what the active layout types,
-    /// or, for non-Latin layouts, the key's character in the ASCII-capable
-    /// layout (the same rule menus use for key equivalents).
+    /// The lowercase character for a shortcut, by the rule menus use for key
+    /// equivalents: with ⌘ held, what the layout types with ⌘ (layouts such
+    /// as Dvorak – QWERTY ⌘ switch to QWERTY then); otherwise what it types
+    /// without modifiers; and for non-Latin layouts, the key's character in
+    /// the ASCII-capable layout.
     static func shortcutCharacter(for event: NSEvent) -> String? {
-        if let characters = event.charactersIgnoringModifiers?.lowercased(),
-           characters.unicodeScalars.count == 1,
-           characters.unicodeScalars.allSatisfy(\.isASCII) {
-            return characters
+        let command = event.modifierFlags.contains(.command)
+        for characters in [command ? event.characters : nil, event.charactersIgnoringModifiers] {
+            if let lowercase = characters?.lowercased(),
+               lowercase.unicodeScalars.count == 1,
+               lowercase.unicodeScalars.allSatisfy(\.isASCII) {
+                return lowercase
+            }
         }
-        return KeyNames.asciiCapableCharacter(for: UInt32(event.keyCode))?.lowercased()
+        return KeyNames.asciiCapableCharacter(for: UInt32(event.keyCode), commandState: command)?.lowercased()
     }
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
