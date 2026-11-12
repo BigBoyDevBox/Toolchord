@@ -230,3 +230,30 @@ import ToolchordCore
         #expect(PalettePanel.shortcut(for: try key(kVK_Return, "\r", [])) == nil)
     }
 }
+
+@MainActor
+@Suite struct ShortcutRecorderTests {
+    /// Review P3: an accessibility press must focus the recorder like a click,
+    /// or the recorded keystrokes go to whichever view had focus.
+    @Test func accessibilityPressFocusesTheRecorder() throws {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 320, height: 120), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 320, height: 120))
+        let textView = NSTextView(frame: NSRect(x: 0, y: 60, width: 320, height: 40))
+        let recorder = ShortcutRecorderControl(frame: NSRect(x: 0, y: 0, width: 168, height: 26))
+        container.addSubview(textView)
+        container.addSubview(recorder)
+        window.contentView = container
+        window.makeFirstResponder(textView)
+        #expect(window.firstResponder === textView)
+
+        #expect(recorder.accessibilityPerformPress())
+        #expect(window.firstResponder === recorder)
+        #expect(recorder.isRecording)
+
+        // A second press cancels, like a second click.
+        #expect(recorder.accessibilityPerformPress())
+        #expect(!recorder.isRecording)
+    }
+}
