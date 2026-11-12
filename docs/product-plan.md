@@ -116,4 +116,4 @@ Toolchord is a working name. Revisit naming before committing to release brandin
 
 ## After the first release
 
-Add JSON ↔ YAML conversion, SHA-256, and text cleanup such as case conversion. Add text diff and regex testing in a roomier editor when the compact interaction has been validated.
+Grow the catalog along the [tool catalog roadmap](tool-catalog.md). The fast-follow tier adds hashing and HMAC, number base conversion, case and slug, hex ⇄ text, line tools, escapes, random strings, ULID and UUID v7, HTML entities, a URL inspector, colors, and cron parsing, in that order of value. Deepen the first six tools with options before adding adjacent commands. Text diff and regex testing wait for a roomier editor until the compact interaction has been validated.
