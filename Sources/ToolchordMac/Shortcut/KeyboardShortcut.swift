@@ -104,6 +104,36 @@ public struct KeyboardShortcut: Codable, Hashable, Sendable {
         if flags == [.command], character?.lowercased() == "q" {
             return .reserved("⌘Q quits apps.")
         }
+        // The palette handles these itself. A global hotkey with the same
+        // combination would shadow the panel's key handling, so the recorder
+        // must not offer it.
+        if flags == [.command] {
+            switch character?.lowercased() {
+            case "c": return .reserved("⌘C copies the selection in Toolchord.")
+            case "x": return .reserved("⌘X cuts the selection in Toolchord.")
+            case "v": return .reserved("⌘V pastes or attaches input in Toolchord.")
+            case "a": return .reserved("⌘A selects all in Toolchord.")
+            case "z": return .reserved("⌘Z undoes in Toolchord.")
+            case "k": return .reserved("⌘K opens the Toolchord actions menu.")
+            case "r": return .reserved("⌘R regenerates a value in Toolchord.")
+            case "w": return .reserved("⌘W closes the Toolchord panel.")
+            case "f": return .reserved("⌘F finds text in Toolchord.")
+            case ",": return .reserved("⌘, opens Toolchord settings.")
+            default: break
+            }
+        }
+        if flags == [.command, .shift], character?.lowercased() == "z" {
+            return .reserved("⇧⌘Z redoes in Toolchord.")
+        }
+        switch (keyCode, flags) {
+        case (UInt32(kVK_Return), [.command]), (UInt32(kVK_ANSI_KeypadEnter), [.command]):
+            return .reserved("⌘↵ copies and closes the Toolchord panel.")
+        case (UInt32(kVK_Return), [.command, .shift]), (UInt32(kVK_ANSI_KeypadEnter), [.command, .shift]):
+            return .reserved("⇧⌘↵ copies without closing the Toolchord panel.")
+        case (UInt32(kVK_Delete), [.command, .shift]):
+            return .reserved("⇧⌘⌫ clears the Toolchord input.")
+        default: break
+        }
         let space = UInt32(kVK_Space)
         switch (keyCode, flags) {
         case (space, [.command]): return .reserved("⌘Space opens Spotlight.")
