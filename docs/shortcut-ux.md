@@ -1,83 +1,81 @@
 # Shortcut UX
 
-Toolchord opens a single panel over the active app. Search finds a command, the preview shows its current result, and the expanded editor gives more room to inspect and edit. [Product plan](product-plan.md) · [Browser prototype](prototype/index.html)
+Toolchord opens a single panel over the active app. Search finds a command, the preview shows its current result, and the expanded tool gives more room to inspect and edit. [Product plan](product-plan.md) · [Design review](design-review.md)
 
-![Toolchord design prototype showing command search, attached JSON input, a selected formatter, its preview, and Copy JSON & Close.](prototype/preview.png)
+![Toolchord with a pasted URL: Inspect URL is suggested, and its preview lists the components and each query parameter with its own Copy button.](images/search-url.png)
 
 ## One panel, three levels of attention
 
-**Find.** Open a compact panel with search focused and six or fewer visible command rows. Use verb-first commands, short aliases, and a footer with key hints. Place the panel on the display with the originating window when known, using the pointer’s display as a fallback. Keep the top edge and search field in place when expanding. Start around 680 points wide within the display’s visible frame.
+**Find.** The panel opens with search focused and a list of commands. Titles are verb-first ("Format JSON", "Convert to snake_case"), and aliases cover common words such as `pretty print`, `epoch`, `GUID`, `slugify`, and `sha256`. Footer hints show the keys that work right now.
 
-**Inspect.** An explicit paste attaches a payload below search and opens a preview beside the command list. The attachment shows metadata such as `Pasted input · JSON · 42 bytes` or `Pasted input · Text · N bytes` when detection is uncertain. Actual content appears in the preview and expanded editor. Clear removes the attachment. When the pasted text resembles a command, **Use as search text** moves it into search.
+**Inspect.** ⌘V attaches the clipboard below search and shows only metadata such as `Pasted · JSON · 71 bytes`; the text itself appears in the tool's editor. Commands that fit the input move to **Suggested for JSON**, and the preview beside the list shows the selected command's live result, its options, and a status. Clear (⇧⌘⌫ or the ✕ button) removes the attachment. When the pasted text names a command, **Use Input as Search Text** moves it into search.
 
-**Edit.** Return opens the selected tool in the same panel, with input and output in columns. Focus the input editor for transforms and the first result control for a generator. Inspectors use labeled fields. Escape returns to search with the entire draft intact. On narrow displays, stack input and result. Let long editors scroll so the footer remains visible.
+**Edit.** Return opens the selected command in the same panel: input and result side by side for transforms, labeled fields with Copy buttons for inspectors, and the value with a Regenerate button for generators. Escape returns to search with the whole draft intact.
 
-The fast path is **shortcut → paste → inspect → ⌘Return**. Return opens the editor when the user needs it. The footer names the visible result that Copy & Close will copy.
+The fast path is **shortcut → ⌘V → read the preview → ⌘↵**. The footer always names what ⌘↵ will copy.
 
 ## Search and payload rules
 
-- Typing edits the command query. An explicit paste while search is focused replaces the attached input and retains the query. Pasting elsewhere follows the focused control’s native behavior, including insertion at the caret in the editor.
-- Edit → Paste and a labeled Paste action use the same native paste path. Read the clipboard only when the user pastes. If the clipboard does not contain text, keep the current payload and show a message.
-- Rank exact names and aliases first, followed by prefixes, word matches in either order, and fuzzy matches. Explicit queries outrank detection. For example, `uuid` finds Generate UUID even when JSON is attached, and `json format` finds Format JSON.
-- With an empty query, rank likely input actions first in a stable order. Keep a compatible selection that the user chose explicitly. Otherwise select the highest-ranked action when the payload changes. XML-like and JSON-like input can still suggest their formatters and validators when malformed. Validation supplies the error.
-- A changed query selects its highest-ranked match. When replacing input under an explicit query, preserve the selection by command ID if it still matches. Preview completion leaves ranking and selection to the search and attachment state.
-- When no commands match, show **No tools found** with **Clear search** and keep the attachment. Offer **Use as search text** for short, single-line input that matches a command or alias, even when the query is empty. This action moves the text into search and clears the attachment. Removing input disables commands that require it. An attached empty string remains a distinct input for tools that accept it.
+- Typing edits the query. ⌘V while search has focus replaces the attached input and keeps the query. ⌘V in the input editor pastes at the caret.
+- Edit › Paste, ⌘V, and the ⌘V button use the same paste command, and the clipboard is read only then. If it holds no text, the current input stays and a notice says so.
+- Ranking: exact title or alias, then prefix, then all words in any order (including the tool family, so `json` lists every JSON command), then fuzzy. Explicit queries outrank detection: `uuid` finds Generate UUID even with JSON attached, and `json format` finds Format JSON.
+- With no query, suggestions for the input come first by relevance, then every other tool in a stable order. Malformed JSON-like and XML-like input still suggests their formatters, so validation can show the error. With nothing attached, up to four recently used tools come first.
+- A changed query selects its best match. New input keeps a selection the user chose if it still fits the input.
+- No matches shows **No tools found** with **Clear search**, keeping the attachment. Commands that need input show "Paste input to preview" until there is some; an attached empty string is real input.
 
 ## Keys and focus
 
 | Context | Key | Result |
 | --- | --- | --- |
-| Anywhere outside Toolchord | Recorded hotkey | Open search, recording the source app. Propose `⌥⇧Space` only if registration succeeds. Menu-bar launch remains available. |
-| Open panel | Recorded hotkey | Refocus the existing panel and retain its current draft and view. |
-| Search | ↑ / ↓ | Select a command and evaluate its preview. Keep focus in search. |
+| Any app | Recorded shortcut (default ⌥⇧Space) | Open search, remembering the app it opened over. If the default can't be registered, ⌃⌥⌘Space is used instead; the menu bar item always works. |
+| Open panel | Recorded shortcut | Refocus the panel, keeping its draft and view. |
+| Search | ↑ / ↓, Page Up / Page Down, ⌘↑ / ⌘↓ | Move the selection; the preview follows and focus stays in search. |
 | Search | Return | Open the selected tool. |
-| Multiline input | Return / arrows / ⌘A | Native newline, caret movement, and select-all behavior. |
-| Search preview or expanded tool | ⌘Return | Copy the current successful primary result shown in the panel and close. Disable copying while the result is pending or invalid. |
-| Panel | ⌘K | Open Actions for copying without closing, clearing input, using plausible command text as search, or regenerating. Show the Actions button for pointer access. |
-| Actions menu | Escape | Close only the menu and restore its trigger's focus. |
-| Expanded tool | Escape | Back to command list, restore query focus and selected command. |
-| Root list | Escape | Dismiss and clear the full session. |
-| Any control | Tab / Shift-Tab | Follow visible control order. Arrow interception applies only in search/list navigation. |
+| Input editor | Return, arrows, ⌘A, ⌘Z, ⌘F | Native newline, caret movement, selection, undo, and find. Tab moves focus; ⌥Tab inserts a tab. |
+| Search or tool | ⌘↵ | Copy the current successful result and close. Disabled while pending or invalid. |
+| Search or tool | ⇧⌘↵ | Copy without closing. |
+| Panel | ⌘K | Actions menu (also the **Actions** button): copy without closing, open or back, paste, use input as search text, clear input, regenerate, the selected command's options, Settings, Close. |
+| Panel | ⌘R / ⇧⌘⌫ / ⌘, / ⌘W | Regenerate / clear input / Settings / close. |
+| Actions menu | Escape | Close only the menu. |
+| Expanded tool | Escape | Back to search with the query and selection restored. |
+| Search | Escape | Dismiss and clear the whole session. |
 
-Respect input-method composition. Return commits marked text and Escape cancels composition before either navigates the panel. Use native controls and VoiceOver labels for commands, result status, copy targets, and input controls. Announce completion or error once evaluation settles. Use text to convey selection, validity, and warnings, and honor Reduce Motion and Reduce Transparency. Verify native keyboard and VoiceOver behavior in the Mac spike.
+Input methods get Return and Escape first while composing, and ⌘↵ is ignored until composition ends. Controls carry VoiceOver labels, list rows report selection, and results and errors are announced once evaluation settles. Selection, validity, and warnings are conveyed with text and symbols, not color alone.
 
-On first launch, show the registered shortcut if available, offer a recorder, and explain that `⌘V` attaches the clipboard contents. If registration fails, show the failure and point to **Open Toolchord** in the menu bar. macOS uses `⌃⌘Space` for Character Viewer. [Apple shortcuts](https://support.apple.com/en-us/102650)
+On first launch, a welcome window shows the shortcut and whether it's active, offers a recorder and one-click choices (⌥⇧Space, ⌃⌘Space, ⌃⌥⌘Space), and explains ⌘V and ⌘↵. ⌃⌘Space is offered with a note that it takes over Emoji & Symbols in every app.
 
 ## Name the copy target
 
-The footer names the primary result displayed for the current command and options. **Copy & Close** and **Copy without closing** copy that exact result. Normal `⌘C` copies selected text using native editor behavior. Individual field Copy buttons and **Copy without closing** preserve the session.
-
 | Command | Primary result / footer |
 | --- | --- |
-| JSON format / minify | Transformed JSON text · **Copy JSON & Close** |
-| JSON validate | Original JSON text after successful validation · **Copy input & Close** |
-| Format XML | Formatted XML text · **Copy XML & Close** |
-| Validate XML | Original XML text after a successful well-formedness check · **Copy input & Close** |
-| Base64 encode / decode | Encoded text / decoded UTF-8 text · **Copy encoded text & Close** / **Copy decoded text & Close** |
-| URL component encode / decode | Transformed component · **Copy component & Close** |
-| Inspect URL query | Ordered JSON array of `{ "name": string, "value": string }` pairs, with repeated and empty pairs preserved · **Copy parameters & Close** |
-| Inspect JWT | Decoded claims object as JSON · **Copy claims & Close**. The header and claims have individual Copy controls. Show **Signature unverified** beside the result. |
-| Unix → ISO 8601 | UTC RFC 3339 text with milliseconds · **Copy UTC time & Close**. Show local time as a secondary value. |
-| ISO 8601 → Unix | Number in the explicitly selected seconds/milliseconds unit · **Copy seconds & Close** / **Copy milliseconds & Close** |
-| Generate UUID | Displayed lowercase UUID v4 · **Copy UUID & Close** |
+| Format JSON, Minify JSON | Transformed JSON · **Copy JSON & Close** |
+| Validate JSON, Validate XML | The original input after a successful check · **Copy input & Close** |
+| Escape / Unescape JSON String | The string literal / the decoded text · **Copy string & Close** / **Copy text & Close** |
+| Format XML | Formatted XML · **Copy XML & Close** |
+| Encode / Decode Base64 and Base64URL | Encoded text / decoded UTF-8 text · **Copy encoded text & Close** / **Copy decoded text & Close** |
+| Encode / Decode URL Component | The transformed component · **Copy component & Close** |
+| Inspect URL | Ordered JSON array of `{"name", "value"}` pairs · **Copy parameters & Close**; each component and pair has its own Copy button |
+| Decode JWT | Claims JSON · **Copy claims & Close**, with **Signature unverified** shown as a warning; the header and each claim have Copy buttons |
+| Convert Unix Time | UTC RFC 3339 with milliseconds · **Copy UTC time & Close**; local time, Unix values, and relative time as fields |
+| Convert Date to Unix Time | A number in the selected unit · **Copy seconds & Close** / **Copy milliseconds & Close** |
+| Show Current Time | Seconds, milliseconds, or UTC text, by option |
+| Generate UUID / UUID v7 / ULID | The value shown · **Copy UUID & Close** / **Copy ULID & Close** |
+| Generate Random String / Lorem Ipsum | **Copy string & Close** / **Copy text & Close** |
+| Hash with SHA-256 (and others) | Lowercase hex digest · **Copy hash & Close** |
+| Case and slug conversions, Sort / Deduplicate / Reverse Lines, Unescape HTML, Decode Hex to Text | **Copy text & Close** or **Copy lines & Close** |
+| Escape HTML, Encode Text as Hex | **Copy HTML & Close** / **Copy hex & Close** |
+| Convert to Decimal / Hex / Binary / Octal | **Copy decimal & Close**, and so on; all four bases as fields |
+| Convert Color to Hex / RGB / HSL | **Copy hex color & Close**, and so on; swatch and all three notations as fields |
+| Count Characters | The character count · **Copy character count & Close**; words, lines, and byte counts as fields |
 
-Use a visible Seconds/Milliseconds selector for timestamp input and default to Seconds. Generate one UUID on first selection within the session and retain it through filtering and navigation until the user selects **Regenerate**.
+Normal ⌘C copies selected text in any editor or result. Field Copy buttons and **Copy without closing** keep the session open and confirm with a short notice.
 
 ## Draft lifetime and completion
 
-A session draft includes the query, payload, edits, selected command, options, generated values, result, errors, and pending work. Back navigation and opening Actions preserve it. Root Escape, successful Copy & Close, switching to another app, screen lock, and app termination clear the draft and retire pending work. Clear input invalidates any result based on that input immediately. Store preferences such as hotkey, appearance, and indentation separately from the draft, which stays in memory.
+The draft — query, payload, edits, selected command, options, generated values, result, errors, and pending work — survives Back and the Actions menu. Root Escape, Copy & Close, switching to another app, screen lock, sleep, user switching, and quitting clear it and retire pending work. Clear Input invalidates any result based on that input immediately. Preferences (shortcut, indentation, menu bar icon, recent tools) are stored separately; the draft stays in memory.
 
-Successful **Copy & Close** dismisses the panel. A failed write leaves it open with an actionable error. On deliberate completion or dismissal, request focus return to the app recorded at invocation when it is still available. macOS may decline the request. On external app switching, leave focus where the user moved it. [Apple activation behavior](https://developer.apple.com/documentation/appkit/nsrunningapplication/activate(from:options:))
+Copy & Close dismisses only after the clipboard write succeeds; a failed write keeps the panel open with an error. Because the panel never activates Toolchord, the app it opened over keeps focus and regains the keyboard as soon as the panel closes. If Toolchord did become active (for example through Settings), it asks the original app to reactivate. On an app switch, focus stays where the user moved it.
 
-## Prototype and review script
+## Design history
 
-Open `docs/prototype/index.html` directly in a browser. The offline study covers JSON format, minify, and validate plus UUID generation. It simulates copy and dismissal. JSON formatting preserves lexical tokens, with illustrative error wording from the browser. Test global invocation, Mac paste permissions, focus return, full-screen Spaces, and VoiceOver in the native prototype.
-
-1. Load the JSON sample, inspect the preview, and simulate Copy JSON & Close without opening the editor.
-2. Reopen, type `pretty`, and press Return. Edit the JSON, then Escape; the query and edited payload survive.
-3. Load invalid JSON. Copy must be disabled and the error must replace the previous result.
-4. Load JSON, then search `guid`. UUID is selected despite the input; it remains stable until Regenerate.
-5. Paste `json format` into search, choose Actions → Use as search text, and find Format JSON.
-6. Reset to no input, open Generate UUID, then check keyboard navigation and the narrow stacked layout.
-
-Raycast’s search and action panel and Alfred’s hotkey inputs informed the command and paste flows. [Raycast search](https://manual.raycast.com/search-bar) · [Raycast action panel](https://manual.raycast.com/action-panel) · [Alfred hotkey arguments](https://www.alfredapp.com/help/workflows/triggers/hotkey/)
+The browser study in [`prototype/`](prototype/index.html) explored this interaction before the native app existed; open `docs/prototype/index.html` in a browser to try it. It covers JSON and UUID only and simulates the clipboard. The native panel replaces it as the reference; [design review](design-review.md) compares the two and the proposed mockups.

@@ -1,124 +1,89 @@
 # Toolchord product plan and design
 
-Toolchord is a native macOS command palette for the small tasks developers do between edits: format an API response, check when a token expires, decode a value, or generate an ID. The main interaction is to open the panel over the current app, inspect a result, then copy it and return to the same work.
+Toolchord is a native macOS command palette for the small tasks developers do between edits: format an API response, check when a token expires, decode a value, convert a timestamp, or generate an ID. Press a shortcut over any app, paste, read the live preview, and press ⌘↵ to copy the result and go straight back to work.
 
-The [shortcut UX](shortcut-ux.md) specifies panel behavior and includes a clickable design study. The [implementation contracts](implementation-contracts.md) define copy results, format rules, expected-result fixtures, and the checks for the native prototype.
+The [shortcut UX](shortcut-ux.md) specifies panel behavior. The [implementation contracts](implementation-contracts.md) define results, copy targets, format rules, and fixtures. The [research](research.md) covers competitors, demand, and macOS constraints, and the [design review](design-review.md) explains how the proposed mockups shaped the final panel.
 
-[IT Tools](https://it-tools.tech/) provides a broad catalog of candidate utilities. [Devly](https://devly.techfixpro.net/) and [DevUtils](https://devutils.com/) already bring offline utilities to the Mac with shortcuts, and [Anvil](https://anvilmac.com/en/events/command-center/) offers searchable clipboard actions. Toolchord’s hypothesis is that putting a useful preview and **Copy & Close** in the same panel will shorten common workflows. Benchmark that before expanding the catalog.
+**Status:** implemented. The app, its 56 commands, and 454 automated tests are in this repository; see the [README](../README.md) to build and run it.
+
+![Toolchord with pasted JSON: suggested tools on the left, a syntax-colored preview on the right, and Copy JSON & Close in the footer.](images/search-json.png)
 
 ## First release
 
+Seven core tools from the original plan, plus the consensus tools that research showed fit the same paste → preview → copy flow. **Scope decision (12 November 2026):** the first release ships every family below; the original seven remain the core workflows for the [validation study](research.md#validation-before-catalog-expansion).
+
 | Tool | Commands and result |
 | --- | --- |
-| **JSON** | Format, minify, or validate. Preserve key order and numeric precision when formatting or minifying. For invalid JSON, show the first syntax error with a line and column. |
-| **XML** | **Format XML** indents structural markup while preserving mixed content and `xml:space="preserve"` regions. **Validate XML** checks XML 1.0 well-formedness and reports syntax errors with a line and column. Documents containing a DOCTYPE get a distinct unsupported message. |
-| **Base64** | Encode and decode text using standard Base64 or Base64URL. Make the alphabet selectable and give clear feedback for malformed input or decoded bytes that cannot be shown as UTF-8 text. |
-| **URL** | Percent encode or decode text and inspect URL query parameters. Keep repeated parameters in order and let users copy values individually. Apply form-style plus-to-space decoding only where appropriate for query parameters. |
-| **JWT** | Decode and display the header and claims with a readable expiry when present. Make individual claims copyable and show **Signature unverified** next to the result. |
-| **Timestamp** | Convert Unix seconds or milliseconds to and from ISO 8601. Show the unit used, let the user override it, and label UTC and local time. |
-| **UUID** | Generate a v4 UUID without input. Keep the UUID stable while it is on screen and provide an explicit **Regenerate** action. |
+| **JSON** | Format (2 spaces, 4 spaces, or tab), minify, or validate, preserving every token's spelling, member order, and duplicate names. Escape text as a JSON string literal, or unescape one. Errors give a line, column, and the offending line with a caret. |
+| **XML** | **Format XML** indents structural markup only, preserving mixed content, `xml:space="preserve"` regions, comments, CDATA, and processing instructions. **Validate XML** checks XML 1.0 well-formedness and namespaces. A DOCTYPE gets a distinct unsupported message, and nothing is ever fetched or expanded. |
+| **Base64** | Encode and decode with the standard alphabet (padded) or Base64URL (unpadded), as separate commands so the alphabet is always explicit. Strict decoding, optional whitespace tolerance, and a clear error for non-UTF-8 bytes. |
+| **URL** | Percent-encode or decode a component once. **Inspect URL** shows scheme, host, port, path, and fragment, plus every query parameter in order with its own Copy control; the primary result is the ordered parameter list as JSON. |
+| **JWT** | Decode the header and claims with **Signature unverified** shown as a warning, a readable expiry, a field per claim, and tolerance for a pasted `Bearer` prefix. |
+| **Time** | Unix seconds or milliseconds (explicit unit) to RFC 3339 UTC, with local time and a relative description; RFC 3339 dates (offset required) to Unix time; and the current time, captured once. |
+| **Identifiers** | UUID v4, UUID v7 (with its embedded timestamp), and ULID. Each stays stable on screen until **Regenerate** (⌘R). |
+| **Random** | Random strings from the system's secure generator (length and alphabet options) and lorem ipsum (sentence to five paragraphs). |
+| **Hash** | SHA-256, SHA-512, SHA-1, and MD5 of the UTF-8 text, with a warning on the legacy algorithms. |
+| **Text** | camelCase, PascalCase, snake_case, kebab-case, CONSTANT_CASE, Title Case, Sentence case, lowercase, UPPERCASE, and slugs; sort, deduplicate, or reverse lines; HTML entity escape and unescape; character, word, line, byte, UTF-16, and scalar counts. |
+| **Plain text and Markdown** | **Make Plain Text** removes invisible characters and typographic spaces, and optionally straightens quotes and dashes, so text copied from documents and web pages works in code and terminals. HTML or Markdown → readable plain text, and Markdown → HTML (CommonMark with GitHub tables, strikethrough, autolinks, and task lists). |
+| **Numbers and color** | Arbitrary-precision decimal, hex, binary, and octal; text ↔ hex bytes; hex, `rgb()`, and `hsl()` color conversion with a swatch. |
 
-JSON and UUID make the first implementation pair because they exercise the pasted-input and no-input paths. The [catalog research](research.md) explains the launch choices and how to compare the workflow with existing tools.
+Deferred tools and the reasons are in the [research](research.md#consensus-catalog).
 
 ## Panel layout
 
-Use one floating panel centered on the display with the frontmost window when it can be determined, with the pointer’s display as the fallback. Keep search and shortcuts in consistent positions as the panel expands. Use the system font for controls, monospaced text for payloads, and a visible selection. Support light and dark appearance, Reduce Motion, and Reduce Transparency. On a display with less room, stack input and output so the footer stays reachable.
+One floating, non-activating panel (760 × 460 points, growing to 600 high for an open tool while keeping its top edge) appears on the display holding the frontmost window, falling back to the pointer's display. It uses Liquid Glass on macOS 26 and later and vibrancy on macOS 14–15, system fonts for controls, monospaced text for payloads, the user's accent color for selection, and works in light and dark appearance with Reduce Motion, Reduce Transparency, and Increase Contrast.
 
-### Compact search
+### Search with live preview
 
-The launch state focuses search and shows a short list of commands. Match verb-first names and common aliases such as `pretty print`, `epoch`, and `GUID`. The user can type a command or paste input directly from the search field.
-
-```text
-┌────────────────────────────────────────────────────────────┐
-│ Toolchord                                                  │
-│ Find a tool or paste input…                            ⌘V  │
-├────────────────────────────────────────────────────────────┤
-│ › Format JSON                                              │
-│   Decode Base64                                            │
-│   Inspect JWT                                              │
-│   Generate UUID                                            │
-├────────────────────────────────────────────────────────────┤
-│ ↑↓ Navigate                     ↵ Open       Esc Dismiss   │
-└────────────────────────────────────────────────────────────┘
-```
-
-### Live preview
-
-Pasting into search replaces the attached text and keeps any typed filter. With no filter, put likely actions first. Show the source, detected type when available, and UTF-8 byte count, with a clear button to remove the attachment. Raw text appears in the selected result or the input editor. A guess changes command order. The user chooses what to copy.
-
-The preview follows the selected action. Show an actionable message for an incompatible value or a parse error. Copy becomes available when the preview represents a successful result for the current input, action, and options.
-
-```text
-┌──────────────────────────────────────────────────────────────────┐
-│ Toolchord                                                        │
-│ Find a tool or paste input…                                  ⌘V  │
-├──────────────────────────────────────────────────────────────────┤
-│ Pasted input · JSON · 28 bytes                             Clear │
-├──────────────────────────────────────────────────────────────────┤
-│ › Format JSON               Preview                 Valid JSON   │
-│   Minify JSON               {                                    │
-│                                "status": 200,                    │
-│                                "cache": "HIT"                    │
-│                              }                                   │
-├──────────────────────────────────────────────────────────────────┤
-│ ↑↓ Navigate                    ↵ Open          ⌘↵ Copy & Close   │
-└──────────────────────────────────────────────────────────────────┘
-```
+Search is focused on open. Typing filters commands by name, alias, and tool family; ⌘V attaches the clipboard as input below the search field, showing only its source, detected type, and size (the text itself appears in the tool's editor, so a pasted secret isn't on display while it is hashed or decoded). With input attached, commands that fit it appear under **Suggested for JSON** (or URL, JWT, and so on) ahead of **Other tools**; with nothing attached, recently used tools come first. The preview beside the list always shows the selected command's live result, its options, and a status such as **Valid JSON**.
 
 ### Expanded tool
 
-Return opens the selected tool in the same panel. Give transforms a multiline input, selectable live output, and the options that affect that action. Give inspectors structured rows with individual copy controls. Field-level **Copy** keeps the panel open. **Copy & Close** uses the tool’s declared primary result and dismisses the panel. Name its target in the footer, such as **Copy claims & Close** for JWT or **Copy parameters & Close** for the ordered URL-query pairs; focusing a field does not change this target.
+Return opens the selected command in the same panel: an editable input (native undo, find, and IME) beside the full result, with the command's options in the header. Inspectors show labeled fields with individual Copy buttons; generators show their value, fields, and a Regenerate button. Escape returns to search with the draft intact.
 
-```text
-┌──────────────────────────────────────────────────────────────────┐
-│ ‹ Tools   Format JSON                                            │
-├──────────────────────────────────────────────────────────────────┤
-│ Input                           Result              Valid JSON   │
-│ {"status":200,"cache":"HIT"}    {                                │
-│                                   "status": 200,                 │
-│                                   "cache": "HIT"                 │
-│                                 }                                │
-├──────────────────────────────────────────────────────────────────┤
-│ Esc Back                                       ⌘↵ Copy & Close   │
-└──────────────────────────────────────────────────────────────────┘
-```
+![An open tool: JSON input on the left and the formatted result on the right.](images/tool-json.png)
 
 ## Keyboard and clipboard behavior
 
 | Input | Behavior |
 | --- | --- |
-| **Global shortcut** | Open the panel with search focused. Repeating the shortcut refocuses the current view and keeps the draft. On first launch, offer `⌥⇧Space` when available and explain how to paste. Let users record another shortcut and open the palette from the menu bar even if registration fails. |
-| **Paste · `⌘V`** | Attach or replace the payload when search has focus. In an editor, paste at the insertion point as normal. |
-| **Arrows · `↑` `↓`** | Move through search results and update the preview. In text editors, arrows move the caret. |
-| **Return · `↵`** | Open the selected command or generator from the list. In the multiline input, insert a newline. |
-| **Copy & Close · `⌘↵`** | Copy the exact primary result shown for the current command, then dismiss the panel. If the originating app needs to be reactivated, request activation. If copying fails, keep the panel open and show the error. |
-| **Actions · `⌘K`** | Open a small menu for secondary actions, such as copying without closing, clearing the input, or regenerating a UUID. |
-| **Escape · `Esc`** | Close Actions if open. Otherwise, return from a tool to the command list with the draft intact or dismiss the root panel and discard the draft. |
-| **Tab · `⇥`** | Move through controls in their visible order. Keep all available actions reachable with the keyboard and VoiceOver. |
+| **Global shortcut** | Opens the palette with search focused; pressing it again refocuses the open palette and keeps the draft. Defaults to **⌥⇧Space**; Settings and the welcome window offer **⌃⌘Space** (which takes over Emoji & Symbols) and recording any other combination. The menu bar item opens the palette even if registration fails. |
+| **⌘V** | In search, attaches or replaces the input and keeps the query. In the input editor, pastes at the insertion point. The clipboard is read only here. |
+| **↑ ↓** | Move through the list while focus stays in search; the preview follows. |
+| **↵** | Opens the selected tool. In the input editor, inserts a newline. |
+| **⌘↵** | Copies the visible successful result and closes the palette, returning focus to the previous app. Disabled while a result is pending or invalid. |
+| **⇧⌘↵** | Copies the result without closing. |
+| **⌘K** | Actions menu: copy without closing, open or go back, paste, use pasted text as the search query, clear input, regenerate, every option of the selected command, Settings, and Close. |
+| **⌘R / ⇧⌘⌫ / ⌘, / ⌘W** | Regenerate, clear input, open Settings, close. |
+| **Escape** | Goes back from a tool to search with the draft intact; at the root, dismisses and discards the draft. Input methods get Escape and Return first while composing. |
+| **Tab** | Moves through controls in visible order; ⌥Tab inserts a tab character in the editor. |
 
-macOS uses `⌃⌘Space` for Character Viewer, so the shortcut recorder and menu-bar entry are part of the design. Start with user-initiated paste because programmatic reads from the general pasteboard can trigger a system prompt. [Apple keyboard shortcuts](https://support.apple.com/en-us/102650) · [Apple pasteboard behavior](https://developer.apple.com/documentation/appkit/nspasteboard/accessbehavior-swift.enum)
+Tool input is processed on-device and kept in memory for the panel session only. Dismissal, Copy & Close, switching to another app, screen lock, sleep, user switching, and quitting all clear the draft and retire pending work. Preferences (shortcut, indentation, menu bar icon, recent command IDs) are stored separately and never include payloads, queries, or results. The app runs in the App Sandbox without the network entitlement, so Toolchord itself cannot send pasted data anywhere; results the user copies go to the standard system clipboard, which macOS may share through Universal Clipboard.
 
-Process tool input on-device and keep it in memory for the current panel session. The draft includes query, input, edits, options, selection, generated values, and results. Persist preferences such as the shortcut separately from the draft. Clear the draft and retire pending work on dismissal or screen lock. Opening, previewing, and cancelling leave the system clipboard untouched. If the user switches to another app while the panel is open, dismiss the panel and leave focus where the user moved it. Do not log payloads, derived text, or queries.
+## Implementation
 
-## Implementation milestones
+The code mirrors the plan's separation of concerns:
 
-1. **Prove the native panel.** Use Swift and try an AppKit `NSPanel` for window placement, search focus, and focus return. Evaluate SwiftUI for panel content. Exercise shortcut registration and rebinding, menu-bar launch, copy, app switching, multiple displays, full-screen Spaces, Stage Manager, and paste permission states before choosing the minimum macOS version and distribution route. [Apple NSPanel documentation](https://developer.apple.com/documentation/appkit/nspanel)
-2. **Build the full interaction with JSON and UUID.** Implement command search, explicit paste, live preview, the expanded editor, and Copy & Close. Keep deterministic tool evaluation separate from panel state; generate UUIDs only on first selection or explicit regeneration. Bind previews and copy eligibility to session, revision, command, and options so delayed completions cannot publish after a change or close/reopen. Apply input/output limits before expensive work. Use the independent fixtures in the implementation contracts.
-3. **Add XML, Base64, URL, JWT, and timestamps.** Reuse the same input, result, error, and copy interactions. Add the XML formatter and validator with fixtures for mixed content, preserved whitespace, and blocked external resources.
-4. **Verify the first release.** Exercise the workflows below on supported macOS versions. Use the [research plan](research.md#validation-before-catalog-expansion) to compare elapsed time, keystrokes, and copy accuracy with existing tools.
+- **ToolchordCore** — commands, input detection, and search ranking. Foundation and CryptoKit only; evaluation is a pure function of a request (input, resolved options, seed, clock, time zone, limits, cancellation).
+- **ToolchordSession** — the draft: query, payload, selection, options, generated values, revisions, background evaluation, and copy gating. Every change bumps the revision and disables copy before new work starts; completions publish only if their session and revision are still current.
+- **ToolchordMac** — the non-activating panel, Carbon hotkey and recorder, pasteboard, SwiftUI views with AppKit text views, Settings, welcome window, menu bar item, and a snapshot renderer.
+- **App** — a thin XcodeGen target: Info.plist keys, sandbox entitlements, and the Icon Composer app icon.
+
+Native findings and decisions are recorded in the [implementation contracts](implementation-contracts.md#native-panel-decisions).
 
 Toolchord is a working name. Revisit naming before committing to release branding, including the existing software uses of [ToolCord](https://github.com/imhvit/ToolCord) and [Chord](https://github.com/KeyChord/Chord).
 
-## First release acceptance checks
+## Acceptance checks
 
-- **JSON:** From an editor, open the palette, paste minified JSON, preview it, and use `⌘↵`. The copied result matches the preview and the editor regains focus when macOS permits activation. A refused activation or exited origin app does not invalidate a successful copy. Malformed JSON identifies the error location and disables copying. Fixing it produces a new valid result.
-- **XML:** Format a namespaced document, preserving mixed content, CDATA, and significant whitespace. Verify that Validate XML copies well-formed input unchanged and gives a line and column for a mismatched tag. A document with a DOCTYPE reports unsupported, leaves the clipboard untouched, and causes no network or file access.
-- **Base64 and URL:** Round-trip non-ASCII text through Base64 and Base64URL. Inspect a URL with repeated query keys and copy the second value without dismissing the panel. Malformed percent escapes show an error.
-- **JWT and time:** Decode a sample token with an expiry, see **Signature unverified**, and copy an individual claim. Convert equivalent seconds and milliseconds to the same instant and check the labels on UTC and local results.
-- **UUID:** Open Generate UUID without pasting anything. The value stays stable until regeneration, and Copy & Close copies the UUID shown.
-- **Focus and clipboard:** Verify a custom shortcut and the menu-bar fallback across multiple displays and full-screen apps. Invoking the shortcut again refocuses the panel. Escape from the editor preserves the draft. Dismissal or switching apps clears it. An invalid or stale preview cannot overwrite the clipboard.
-- **Offline and accessible use:** Run all seven tools with networking unavailable. Verify that pasted data is absent from stored preferences and logs, and that the panel can be used with the keyboard and VoiceOver.
+Automated tests cover every fixture in the contracts. These checks also need a person at the keyboard:
+
+- **JSON:** From an editor, open the palette, paste minified JSON, and press ⌘↵. The clipboard matches the preview and the editor has focus again. Malformed JSON shows the error location and disables copying; fixing it in the editor restores copying.
+- **XML:** Format a namespaced document with mixed content, CDATA, and preserved whitespace. A mismatched tag reports its line and column. A DOCTYPE reports unsupported and leaves the clipboard untouched.
+- **Base64, URL, JWT, time:** Round-trip non-ASCII text through both Base64 alphabets. Copy the second of two repeated query values without closing. Decode a token, see **Signature unverified**, and copy one claim. Convert equivalent seconds and milliseconds to the same instant.
+- **Generators:** Open Generate UUID with nothing pasted. The value stays the same until ⌘R, and ⌘↵ copies the value shown.
+- **Focus and clipboard:** The shortcut and the menu bar item work across multiple displays, full-screen apps, and Stage Manager. Pressing the shortcut again refocuses the palette. Escape from a tool keeps the draft; switching apps clears it. Opening and closing the palette never changes the clipboard.
+- **Accessibility:** Complete each flow with the keyboard alone and with VoiceOver; results and errors are announced when they settle.
 
 ## After the first release
 
-Evaluate JSON ↔ YAML conversion, SHA-256, and text cleanup after testing the core workflow. Text diff and regex testing need a roomier editor. Consider XML schema validation, XPath, and conversion separately from the first release’s syntax check and formatter. See the [catalog research](research.md#tool-selection) for more candidates.
+Run the [validation study](research.md#validation-before-catalog-expansion), then consider regex testing and text diff (they need a roomier two-input editor), JSON ↔ YAML once a lossless parser is chosen, QR codes, certificate inspection, and cron explanations.

@@ -1,0 +1,3 @@
+import ToolchordMac
+
+ToolchordApplication.run()

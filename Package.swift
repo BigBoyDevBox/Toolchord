@@ -1,0 +1,34 @@
+// swift-tools-version: 6.0
+import PackageDescription
+
+// Toolchord is split so that tool evaluation stays deterministic and testable
+// without AppKit:
+//
+// - ToolchordCore: tool commands, input detection, and search ranking.
+//   Foundation and CryptoKit only.
+// - ToolchordSession: the palette's in-memory draft, evaluation scheduling,
+//   and copy gating. No AppKit.
+// - ToolchordMac: the panel, global shortcut, pasteboard, settings, and views.
+// - ToolchordSnapshots: renders palette states to PNG for design review.
+//
+// The app bundle itself is produced from project.yml (XcodeGen) and links
+// ToolchordMac.
+let package = Package(
+    name: "Toolchord",
+    platforms: [.macOS(.v14)],
+    products: [
+        .library(name: "ToolchordCore", targets: ["ToolchordCore"]),
+        .library(name: "ToolchordSession", targets: ["ToolchordSession"]),
+        .library(name: "ToolchordMac", targets: ["ToolchordMac"]),
+        .executable(name: "toolchord-snapshots", targets: ["ToolchordSnapshots"]),
+    ],
+    targets: [
+        .target(name: "ToolchordCore"),
+        .target(name: "ToolchordSession", dependencies: ["ToolchordCore"]),
+        .target(name: "ToolchordMac", dependencies: ["ToolchordCore", "ToolchordSession"]),
+        .executableTarget(name: "ToolchordSnapshots", dependencies: ["ToolchordMac"]),
+        .testTarget(name: "ToolchordCoreTests", dependencies: ["ToolchordCore"]),
+        .testTarget(name: "ToolchordSessionTests", dependencies: ["ToolchordSession"]),
+        .testTarget(name: "ToolchordMacTests", dependencies: ["ToolchordMac"]),
+    ]
+)
