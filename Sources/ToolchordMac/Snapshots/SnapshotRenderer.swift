@@ -55,6 +55,15 @@ public enum SnapshotRenderer {
         Scenario(name: "search-narrow", appearance: .aqua, width: 600) { session in
             session.attach("Hello, World")
         },
+        Scenario(name: "search-markdown", appearance: .darkAqua, width: Theme.panelWidth) { session in
+            session.attach("## Release notes\n\nToolchord now converts **Markdown** and HTML.\n\n- Render Markdown to HTML\n- [Docs](https://example.test/docs) and `code`\n")
+        },
+        Scenario(name: "search-html", appearance: .aqua, width: Theme.panelWidth) { session in
+            session.attach("<article><h2>Release notes</h2><p>Toolchord now converts <b>Markdown</b> and HTML.</p><ul><li>Render Markdown</li><li><a href=\"https://example.test/docs\">Docs</a></li></ul></article>")
+        },
+        Scenario(name: "search-plaintext", appearance: .darkAqua, width: Theme.panelWidth) { session in
+            session.attach("curl\u{00A0}\u{2014}silent \u{201C}https://example.test/api?q=1\u{201D}\u{200B}")
+        },
     ]
 
     /// Writes one PNG per scenario into `directory` and returns their URLs.

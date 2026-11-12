@@ -16,5 +16,7 @@ extension ToolGroup {
     public static let number = ToolGroup(id: "number", name: "Number")
     public static let hex = ToolGroup(id: "hex", name: "Hex")
     public static let color = ToolGroup(id: "color", name: "Color")
+    public static let plainText = ToolGroup(id: "plaintext", name: "Plain text")
+    public static let markdown = ToolGroup(id: "markdown", name: "Markdown")
     public static let inspect = ToolGroup(id: "inspect", name: "Text")
 }

@@ -5,6 +5,8 @@ import Foundation
 public enum InputKind: String, Sendable, Hashable, CaseIterable {
     case jwt
     case json
+    /// An HTML document or fragment (also reported as ``xml`` when it starts with `<`).
+    case html
     case xml
     case url
     case queryString
@@ -23,6 +25,12 @@ public enum InputKind: String, Sendable, Hashable, CaseIterable {
     case htmlEntities
     case jsonStringLiteral
     case escapedText
+    /// Text with Markdown structure: headings, lists, fences, links, emphasis.
+    case markdown
+    /// Text containing characters typical of rich-text copies: invisible
+    /// formatting characters, unusual spaces, or typographic quotes and dashes.
+    /// Never the primary kind.
+    case specialCharacters
     /// Short single-line text made of words or an identifier, such as
     /// `user name` or `userName` — a candidate for case conversion.
     case words
@@ -33,6 +41,7 @@ public enum InputKind: String, Sendable, Hashable, CaseIterable {
         switch self {
         case .jwt: "JWT"
         case .json: "JSON"
+        case .html: "HTML"
         case .xml: "XML"
         case .url: "URL"
         case .queryString: "Query string"
@@ -48,6 +57,8 @@ public enum InputKind: String, Sendable, Hashable, CaseIterable {
         case .htmlEntities: "HTML entities"
         case .jsonStringLiteral: "JSON string"
         case .escapedText: "Escaped text"
+        case .markdown: "Markdown"
+        case .specialCharacters: "Text"
         case .words: "Text"
         case .multiline: "Text"
         case .text: "Text"
@@ -89,6 +100,6 @@ public struct InputProfile: Sendable, Hashable {
     /// General text tools suggest themselves only for plain text, so they
     /// never crowd out the specific tools for JSON, URLs, and so on.
     public var isPlainText: Bool {
-        isAttached && !isBlank && [.text, .words, .multiline].contains(primaryKind)
+        isAttached && !isBlank && [.text, .words, .multiline, .markdown].contains(primaryKind)
     }
 }

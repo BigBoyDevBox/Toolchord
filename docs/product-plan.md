@@ -4,7 +4,7 @@ Toolchord is a native macOS command palette for the small tasks developers do be
 
 The [shortcut UX](shortcut-ux.md) specifies panel behavior. The [implementation contracts](implementation-contracts.md) define results, copy targets, format rules, and fixtures. The [research](research.md) covers competitors, demand, and macOS constraints, and the [design review](design-review.md) explains how the proposed mockups shaped the final panel.
 
-**Status:** implemented. The app, its 52 commands, and 388 automated tests are in this repository; see the [README](../README.md) to build and run it.
+**Status:** implemented. The app, its 56 commands, and 452 automated tests are in this repository; see the [README](../README.md) to build and run it.
 
 ![Toolchord with pasted JSON: suggested tools on the left, a syntax-colored preview on the right, and Copy JSON & Close in the footer.](images/search-json.png)
 
@@ -24,6 +24,7 @@ Seven core tools from the original plan, plus the consensus tools that research 
 | **Random** | Random strings from the system's secure generator (length and alphabet options) and lorem ipsum (sentence to five paragraphs). |
 | **Hash** | SHA-256, SHA-512, SHA-1, and MD5 of the UTF-8 text, with a warning on the legacy algorithms. |
 | **Text** | camelCase, PascalCase, snake_case, kebab-case, CONSTANT_CASE, Title Case, Sentence case, lowercase, UPPERCASE, and slugs; sort, deduplicate, or reverse lines; HTML entity escape and unescape; character, word, line, byte, UTF-16, and scalar counts. |
+| **Plain text and Markdown** | **Make Plain Text** removes invisible characters and typographic spaces, and optionally straightens quotes and dashes, so text copied from documents and web pages works in code and terminals. HTML or Markdown → readable plain text, and Markdown → HTML (CommonMark with GitHub tables, strikethrough, autolinks, and task lists). |
 | **Numbers and color** | Arbitrary-precision decimal, hex, binary, and octal; text ↔ hex bytes; hex, `rgb()`, and `hsl()` color conversion with a swatch. |
 
 Deferred tools and the reasons are in the [research](research.md#consensus-catalog).

@@ -6,7 +6,7 @@ Developer tools a shortcut away. Toolchord is a native macOS palette for the sma
 
 ## What it does
 
-52 commands in 16 tool families, all offline:
+56 commands in 18 tool families, all offline:
 
 - **JSON** — format, minify, and validate without changing a single number or key order; escape and unescape string literals.
 - **XML** — format structure while keeping mixed content and preserved whitespace intact; well-formedness and namespace checks.
@@ -15,6 +15,7 @@ Developer tools a shortcut away. Toolchord is a native macOS palette for the sma
 - **Conversion** — Unix time ↔ RFC 3339, number bases at any size, hex/`rgb()`/`hsl()` colors, ten case styles and slugs.
 - **Generation** — UUID v4 and v7, ULID, secure random strings, lorem ipsum, the current time.
 - **Lines and hashes** — sort, deduplicate, and reverse lines; SHA-256, SHA-512, SHA-1, and MD5.
+- **Plain text and Markdown** — strip hidden characters, non-breaking spaces, and smart quotes from copied text; turn HTML or Markdown into readable plain text; render Markdown to HTML.
 
 Paste something and Toolchord suggests the tools that fit it. Every result shows exactly what ⌘↵ will copy, errors point to the line and column, and inspectors give each field its own Copy button.
 
@@ -57,7 +58,7 @@ Settings (from the menu bar icon or ⌘, in the palette) cover the shortcut, ope
 make test
 ```
 
-388 tests cover every tool fixture, a robustness sweep that runs each command against awkward input, the session's stale-result and copy rules, and the Mac layer's logic.
+452 tests cover every tool fixture, a robustness sweep that runs each command against awkward input, the session's stale-result and copy rules, and the Mac layer's logic.
 
 ```bash
 make snapshots

@@ -29,7 +29,12 @@ public enum InputDetector {
         let lineCount = countLines(utf8)
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
-            return InputProfile(isAttached: true, kinds: [.text], primaryKind: .text, byteCount: byteCount, lineCount: lineCount, isBlank: true)
+            // Blank, but possibly only non-breaking spaces or line separators.
+            var kinds: Set<InputKind> = [.text]
+            if prefix(of: text, maxBytes: scanLimit).unicodeScalars.contains(where: PlainTextTools.isSpecial) {
+                kinds.insert(.specialCharacters)
+            }
+            return InputProfile(isAttached: true, kinds: kinds, primaryKind: .text, byteCount: byteCount, lineCount: lineCount, isBlank: true)
         }
 
         var kinds: Set<InputKind> = [.text]
@@ -37,7 +42,7 @@ public enum InputDetector {
 
         let first = trimmed.unicodeScalars.first!
         let last = trimmed.unicodeScalars.last!
-        if first == "{" || first == "[" { kinds.insert(.json) }
+        if first == "{" || (first == "[" && startsLikeJSONArray(trimmed)) { kinds.insert(.json) }
         if first == "<" && trimmed.contains(">") { kinds.insert(.xml) }
         if first == "\"" && last == "\"" && trimmed.unicodeScalars.count >= 2 { kinds.insert(.jsonStringLiteral) }
 
@@ -51,6 +56,14 @@ public enum InputDetector {
         }
 
         let sample = prefix(of: text, maxBytes: scanLimit)
+        if !kinds.contains(.json) && kinds.isDisjoint(with: specificTokenKinds) {
+            let isMarkdown = MarkupDetector.isMarkdown(sample)
+            if isMarkdown { kinds.insert(.markdown) }
+            if MarkupDetector.isHTML(sample, startsWithMarkup: first == "<", isMarkdown: isMarkdown) {
+                kinds.insert(.html)
+            }
+        }
+        if sample.unicodeScalars.contains(where: PlainTextTools.isSpecial) { kinds.insert(.specialCharacters) }
         if containsHTMLEntity(sample) { kinds.insert(.htmlEntities) }
         if containsBackslashEscape(sample) { kinds.insert(.escapedText) }
         if !kinds.contains(.percentEncoded) && !kinds.contains(.url) && containsPercentEscape(sample) {
@@ -65,6 +78,23 @@ public enum InputDetector {
             lineCount: lineCount,
             isBlank: false
         )
+    }
+
+    /// Kinds of a single token (URLs, numbers, encodings) that rule out
+    /// reading the text as Markdown or HTML.
+    private static let specificTokenKinds: Set<InputKind> = [
+        .jwt, .url, .queryString, .uuid, .dateTime, .unixTime, .color, .hexColor, .base64, .base64URL, .number, .hex,
+    ]
+
+    /// `[` followed by `]` or something that can start a JSON value, so
+    /// Markdown such as `[docs](https://…)` and prose in brackets aren't taken
+    /// for JSON. Malformed arrays such as `[1,` still are.
+    private static func startsLikeJSONArray(_ text: String) -> Bool {
+        let rest = text.unicodeScalars.dropFirst().drop { $0 == " " || $0 == "\t" || $0 == "\n" || $0 == "\r" }
+        guard let next = rest.first else { return true }
+        if "{[]\"-0123456789".unicodeScalars.contains(next) { return true }
+        let word = String(String.UnicodeScalarView(rest.prefix(5)))
+        return word.hasPrefix("true") || word.hasPrefix("false") || word.hasPrefix("null")
     }
 
     // MARK: - Token kinds
@@ -146,12 +176,14 @@ public enum InputDetector {
         guard body.contains("=") else { return false }
         let pairs = body.split(separator: "&", omittingEmptySubsequences: true)
         guard !pairs.isEmpty else { return false }
-        if pairs.count == 1 && !token.hasPrefix("?") {
-            // A single `key=value` is a weaker signal; require a plausible key.
-            let key = pairs[0].prefix { $0 != "=" }
-            return !key.isEmpty && key.unicodeScalars.allSatisfy { $0.isASCII && ($0.properties.isAlphabetic || $0.properties.numericType == .decimal || "_-.[]%".unicodeScalars.contains($0)) }
+        // Every key must be plausible, so text that merely contains `=` and
+        // `&` (a Markdown link to a URL with a query) isn't taken for one.
+        return pairs.allSatisfy { pair in
+            let key = pair.prefix { $0 != "=" }
+            return !key.isEmpty && key.unicodeScalars.allSatisfy {
+                $0.isASCII && ($0.properties.isAlphabetic || $0.properties.numericType == .decimal || "_-.[]%+$~*!".unicodeScalars.contains($0))
+            }
         }
-        return true
     }
 
     private static func isUUID(_ scalars: [Unicode.Scalar]) -> Bool {
@@ -343,8 +375,8 @@ public enum InputDetector {
         // of Base64, so text matching both is almost always Base64. A
         // prefixed number such as 0xff is a number before it is hex bytes.
         let priority: [InputKind] = [
-            .jwt, .json, .xml, .url, .uuid, .dateTime, .unixTime, .color, .base64URL, .base64, .queryString,
-            .number, .hex, .percentEncoded, .jsonStringLiteral, .htmlEntities, .escapedText, .words, .multiline, .text,
+            .jwt, .json, .html, .xml, .url, .uuid, .dateTime, .unixTime, .color, .base64URL, .base64, .queryString,
+            .number, .hex, .markdown, .percentEncoded, .jsonStringLiteral, .htmlEntities, .escapedText, .words, .multiline, .text,
         ]
         return priority.first { kinds.contains($0) } ?? .text
     }

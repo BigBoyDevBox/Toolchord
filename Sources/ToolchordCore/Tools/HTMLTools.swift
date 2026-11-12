@@ -17,7 +17,7 @@ public enum HTMLTools {
         icon: .glyph("&;"),
         aliases: ["html escape", "html encode", "escape html entities", "encode html entities"],
         copyNoun: "HTML",
-        affinity: { profile in profile.has(.xml) ? 30 : 0 },
+        affinity: { profile in profile.has(.xml) || profile.has(.html) ? 30 : 0 },
         evaluate: { request in escapeHTML(request) }
     )
 

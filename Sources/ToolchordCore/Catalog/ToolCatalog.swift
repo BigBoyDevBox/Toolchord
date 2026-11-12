@@ -20,6 +20,8 @@ public enum ToolCatalog {
             NumberTools.commands,
             HexTools.commands,
             ColorTools.commands,
+            PlainTextTools.commands,
+            MarkupTools.commands,
             TextTools.commands,
         ]
         let all = groups.flatMap { $0 }
