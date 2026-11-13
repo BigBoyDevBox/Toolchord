@@ -183,6 +183,9 @@ private struct CommandList: View {
                                                 session.select(id)
                                             }
                                         }
+                                        .accessibilityAction {
+                                            session.select(id)
+                                        }
                                         .accessibilityAction(named: "Open") {
                                             session.select(id)
                                             actions.openSelected()
