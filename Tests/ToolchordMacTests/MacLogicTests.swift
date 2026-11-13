@@ -193,7 +193,9 @@ import ToolchordCore
     @Test func invalidStoredShortcutFallsBackToDefault() throws {
         let suite = "ToolchordTests.\(UUID().uuidString)"
         let defaults = makeDefaults(name: suite)
-        let reserved = KeyboardShortcut(keyCode: UInt16(kVK_Space), modifierFlags: [.command])
+        // ⌘↵ copies and closes the panel, so it is reserved on every Mac and
+        // keyboard layout, unlike the macOS shortcuts, which can be turned off.
+        let reserved = KeyboardShortcut(keyCode: UInt16(kVK_Return), modifierFlags: [.command])
         defaults.set(try JSONEncoder().encode(reserved), forKey: "shortcut")
         #expect(AppPreferences(defaults: defaults).shortcut == .defaultShortcut)
         defaults.removePersistentDomain(forName: suite)
@@ -203,6 +205,24 @@ import ToolchordCore
         validDefaults.set(try JSONEncoder().encode(KeyboardShortcut.controlCommandSpace), forKey: "shortcut")
         #expect(AppPreferences(defaults: validDefaults).shortcut == .controlCommandSpace)
         validDefaults.removePersistentDomain(forName: validSuite)
+    }
+
+    @Test func corruptStoredShortcutFallsBackToDefault() throws {
+        // Values no key press produces: a key code wider than 16 bits, and a
+        // modifier bit other than ⌃⌥⇧⌘.
+        let corrupt = [
+            KeyboardShortcut(keyCode: 70_000, carbonModifiers: UInt32(cmdKey | optionKey)),
+            KeyboardShortcut(keyCode: UInt32(kVK_ANSI_K), carbonModifiers: UInt32(cmdKey | optionKey) | 0x1_0000),
+        ]
+        for stored in corrupt {
+            let suite = "ToolchordTests.\(UUID().uuidString)"
+            let defaults = makeDefaults(name: suite)
+            defaults.set(try JSONEncoder().encode(stored), forKey: "shortcut")
+            #expect(AppPreferences(defaults: defaults).shortcut == .defaultShortcut, "\(stored)")
+            defaults.removePersistentDomain(forName: suite)
+        }
+        // Naming a key code that wide doesn't trap.
+        #expect(KeyNames.name(for: 70_000) == "Key 70000")
     }
 
     @Test func indentationPreferenceAppliesToFormatters() throws {

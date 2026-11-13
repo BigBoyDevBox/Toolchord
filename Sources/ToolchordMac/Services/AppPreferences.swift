@@ -70,12 +70,13 @@ public final class AppPreferences: SessionPreferences {
             Key.remembersRecents: true,
             Key.showsMenuBarIcon: true,
         ])
-        // A shortcut stored by an older build may now be reserved (for example
-        // a palette command key); fall back rather than register a hotkey that
-        // shadows the panel.
+        // A stored shortcut may be one the recorder now rejects, such as a
+        // palette command key saved by an older build, or corrupt data no key
+        // press produces. Fall back rather than register a hotkey that shadows
+        // the panel or names no key.
         if let data = defaults.data(forKey: Key.shortcut),
            let stored = try? JSONDecoder().decode(KeyboardShortcut.self, from: data),
-           stored.problem == nil {
+           stored.isRecordable, stored.problem == nil {
             shortcut = stored
         } else {
             shortcut = .defaultShortcut

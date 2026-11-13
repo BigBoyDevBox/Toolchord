@@ -26,6 +26,14 @@ public struct KeyboardShortcut: Codable, Hashable, Sendable {
 
     public static let defaultShortcut = optionShiftSpace
 
+    /// Whether a key press could have produced this shortcut: a 16-bit key
+    /// code and no modifiers but ⌃⌥⇧⌘. Stored preferences can hold anything.
+    var isRecordable: Bool {
+        UInt16(exactly: keyCode) != nil && carbonModifiers & ~Self.recordableModifiers == 0
+    }
+
+    private static let recordableModifiers = UInt32(controlKey | optionKey | shiftKey | cmdKey)
+
     public var modifierFlags: NSEvent.ModifierFlags {
         var flags: NSEvent.ModifierFlags = []
         if carbonModifiers & UInt32(controlKey) != 0 { flags.insert(.control) }
@@ -219,7 +227,10 @@ enum KeyNames {
 
     /// The character `keyCode` produces in the keyboard layout `source`.
     static func character(for keyCode: UInt32, commandState: Bool, in source: TISInputSource) -> String? {
-        guard let pointer = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else { return nil }
+        // Virtual key codes are 16 bits; a wider one, as in corrupt
+        // preferences, names no key.
+        guard let virtualKeyCode = UInt16(exactly: keyCode),
+              let pointer = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else { return nil }
         let layoutData = Unmanaged<CFData>.fromOpaque(pointer).takeUnretainedValue() as Data
         var deadKeyState: UInt32 = 0
         var length = 0
@@ -228,7 +239,7 @@ enum KeyNames {
             guard let layout = buffer.baseAddress?.assumingMemoryBound(to: UCKeyboardLayout.self) else { return -1 }
             return UCKeyTranslate(
                 layout,
-                UInt16(keyCode),
+                virtualKeyCode,
                 UInt16(kUCKeyActionDisplay),
                 commandState ? UInt32((cmdKey >> 8) & 0xFF) : 0,
                 UInt32(LMGetKbdType()),
