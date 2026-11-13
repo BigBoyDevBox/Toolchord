@@ -14,9 +14,9 @@ protocol PaletteCommandHandling: AnyObject {
     func dismissPanel()
     /// The search field's field editor received a paste command.
     func pasteIntoSearch()
-    /// ⌘V with no editable text focused. Returns whether the controller
-    /// handled it, by explaining that a generator tool takes no input.
-    func explainPasteWithoutInput() -> Bool
+    /// ⌘V with no editable text focused: paste into the input editor or the
+    /// search field, or explain that a generator tool takes no input.
+    func pasteFromClipboard()
 }
 
 /// A borderless, non-activating floating panel.
@@ -157,12 +157,13 @@ final class PalettePanel: NSPanel {
             item.tag = NSTextFinder.Action.showFindInterface.rawValue
             return NSApp.sendAction(#selector(NSResponder.performTextFinderAction(_:)), to: firstResponder, from: item)
         case .edit(let action):
-            // With no editable text focused, as in a generator tool, whose
-            // only text is its read-only result, Paste would do nothing; the
-            // controller explains why instead. Editable text, such as the
-            // input editor, the search field, or a Find field, keeps Paste.
-            if action == #selector(NSText.paste(_:)), !focusIsOnEditableText,
-               commandHandler?.explainPasteWithoutInput() == true {
+            // Paste with no editable text focused, such as on a read-only
+            // result, would do nothing there. The controller pastes into the
+            // input editor or search field instead, or explains that a
+            // generator tool takes no input. Editable text, such as the input
+            // editor, the search field, or a Find field, keeps its own Paste.
+            if action == #selector(NSText.paste(_:)), !focusIsOnEditableText, let commandHandler {
+                commandHandler.pasteFromClipboard()
                 return true
             }
             // Accessory apps may not route standard editing shortcuts through
