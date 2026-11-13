@@ -105,6 +105,9 @@ public final class PaletteSession {
     public private(set) var sessionID = UUID()
     public private(set) var query = ""
     public private(set) var payload: Payload?
+    /// Increases whenever input is attached or removed, but not when it is
+    /// edited, so views can tell a new document from an edit to the same one.
+    public private(set) var inputGeneration = 0
     public private(set) var listing: CommandListing
     public private(set) var selectedID: String?
     public private(set) var mode: PaletteMode = .search
@@ -269,6 +272,7 @@ public final class PaletteSession {
     /// Attaches pasted text, replacing any attachment and keeping the query.
     public func attach(_ text: String) {
         payload = Payload(text: text, source: .pasted, limits: limits)
+        inputGeneration += 1
         if !rebuildListing(.payload) { scheduleEvaluation() }
     }
 
@@ -289,6 +293,7 @@ public final class PaletteSession {
     public func clearInput() {
         guard payload != nil else { return }
         payload = nil
+        inputGeneration += 1
         isActionsMenuOpen = false
         if !rebuildListing(.payload) { scheduleEvaluation() }
     }
@@ -297,6 +302,7 @@ public final class PaletteSession {
     public func useAsSearchText() {
         guard canUseAsSearchText, let text = payload?.text else { return }
         payload = nil
+        inputGeneration += 1
         isActionsMenuOpen = false
         mode = .search
         query = text.trimmingCharacters(in: .whitespaces)
@@ -412,6 +418,7 @@ public final class PaletteSession {
         revision += 1
         query = ""
         payload = nil
+        inputGeneration += 1
         mode = .search
         isActionsMenuOpen = false
         notice = nil
