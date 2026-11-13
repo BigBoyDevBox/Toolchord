@@ -173,11 +173,16 @@ private struct CommandList: View {
                                     CommandRow(command: command, isSelected: id == session.selectedID)
                                         .id(id)
                                         .contentShape(Rectangle())
-                                        .onTapGesture(count: 2) {
-                                            session.select(id)
-                                            actions.openSelected()
+                                        // One tap selects; a second tap on the already-selected row
+                                        // opens it. A double-tap gesture would hold every single
+                                        // tap for the double-tap timeout, so it is not used.
+                                        .onTapGesture {
+                                            if session.selectedID == id {
+                                                actions.openSelected()
+                                            } else {
+                                                session.select(id)
+                                            }
                                         }
-                                        .onTapGesture { session.select(id) }
                                         .accessibilityAction(named: "Open") {
                                             session.select(id)
                                             actions.openSelected()
