@@ -223,16 +223,21 @@ public final class PanelController: NSObject, PaletteActions, PaletteCommandHand
     /// The ⌘V button: send a real paste command to the search field so the
     /// read goes through the same path as typing ⌘V.
     func pasteFromClipboard() {
-        if session.isInTool, session.selectedCommand?.isGenerator == true {
-            session.rejectPaste(reason: "Generators create a new value and don’t use input.")
-            return
-        }
+        if explainPasteWithoutInput() { return }
         if session.isInTool {
             focus.focusEditor()
         } else {
             focus.focusSearch()
         }
         NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: self)
+    }
+
+    /// A generator tool has no input, so Paste there posts a notice saying so.
+    /// Returns whether this was such a paste.
+    func explainPasteWithoutInput() -> Bool {
+        guard session.isInTool, session.selectedCommand?.isGenerator == true else { return false }
+        session.rejectPaste(reason: "Generators create a new value and don’t use input.")
+        return true
     }
 
     func pasteIntoSearch() {

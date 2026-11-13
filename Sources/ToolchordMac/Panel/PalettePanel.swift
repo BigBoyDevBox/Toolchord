@@ -14,8 +14,9 @@ protocol PaletteCommandHandling: AnyObject {
     func dismissPanel()
     /// The search field's field editor received a paste command.
     func pasteIntoSearch()
-    /// The user pressed ⌘V (or the Paste button) to paste.
-    func pasteFromClipboard()
+    /// ⌘V with no editable text focused. Returns whether the controller
+    /// handled it, by explaining that a generator tool takes no input.
+    func explainPasteWithoutInput() -> Bool
 }
 
 /// A borderless, non-activating floating panel.
@@ -156,10 +157,12 @@ final class PalettePanel: NSPanel {
             item.tag = NSTextFinder.Action.showFindInterface.rawValue
             return NSApp.sendAction(#selector(NSResponder.performTextFinderAction(_:)), to: firstResponder, from: item)
         case .edit(let action):
-            // Paste goes through the controller so a generator tool can
-            // explain that it does not use input.
-            if action == #selector(NSText.paste(_:)) {
-                commandHandler?.pasteFromClipboard()
+            // With no editable text focused, as in a generator tool, whose
+            // only text is its read-only result, Paste would do nothing; the
+            // controller explains why instead. Editable text, such as the
+            // input editor, the search field, or a Find field, keeps Paste.
+            if action == #selector(NSText.paste(_:)), !focusIsOnEditableText,
+               commandHandler?.explainPasteWithoutInput() == true {
                 return true
             }
             // Accessory apps may not route standard editing shortcuts through
@@ -168,6 +171,12 @@ final class PalettePanel: NSPanel {
             return NSApp.sendAction(action, to: nil, from: self)
         }
         return true
+    }
+
+    /// Whether typed or pasted text would go into the focused view. A search
+    /// or Find field edits through a field editor, which is a text view too.
+    private var focusIsOnEditableText: Bool {
+        (firstResponder as? NSTextView)?.isEditable == true
     }
 }
 
