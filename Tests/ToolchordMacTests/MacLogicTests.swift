@@ -190,6 +190,21 @@ import ToolchordCore
         #expect(preferences.recentCommandIDs.isEmpty)
     }
 
+    @Test func invalidStoredShortcutFallsBackToDefault() throws {
+        let suite = "ToolchordTests.\(UUID().uuidString)"
+        let defaults = makeDefaults(name: suite)
+        let reserved = KeyboardShortcut(keyCode: UInt16(kVK_Space), modifierFlags: [.command])
+        defaults.set(try JSONEncoder().encode(reserved), forKey: "shortcut")
+        #expect(AppPreferences(defaults: defaults).shortcut == .defaultShortcut)
+        defaults.removePersistentDomain(forName: suite)
+
+        let validSuite = "ToolchordTests.\(UUID().uuidString)"
+        let validDefaults = makeDefaults(name: validSuite)
+        validDefaults.set(try JSONEncoder().encode(KeyboardShortcut.controlCommandSpace), forKey: "shortcut")
+        #expect(AppPreferences(defaults: validDefaults).shortcut == .controlCommandSpace)
+        validDefaults.removePersistentDomain(forName: validSuite)
+    }
+
     @Test func indentationPreferenceAppliesToFormatters() throws {
         let preferences = AppPreferences(defaults: makeDefaults())
         preferences.indent = .tab
