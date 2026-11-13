@@ -446,6 +446,7 @@ private struct ResultContent: View {
             )
         case .success(let output):
             SuccessView(output: output, command: command, dimmed: dimmed, actions: actions, focus: focus, isTool: session.isInTool)
+                .id(command.id)
         case .invalid(let diagnostic):
             ErrorView(diagnostic: diagnostic, input: session.payload?.text)
         case .unsupported(let message):
@@ -463,6 +464,7 @@ private struct SuccessView: View {
     let actions: PaletteActions
     let focus: PaletteFocus?
     var isTool = false
+    @State private var warningsExpanded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -493,9 +495,13 @@ private struct SuccessView: View {
                         .opacity(dimmed ? 0.45 : 1)
                 }
             }
-            WarningsView(warnings: output.warnings)
+            WarningsView(warnings: output.warnings, isExpanded: $warningsExpanded)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onChange(of: output.warnings) { _, _ in warningsExpanded = false }
+        .onChange(of: dimmed) { _, pending in
+            if pending { warningsExpanded = false }
+        }
     }
 
     private var resultText: some View {
@@ -623,30 +629,6 @@ private struct SwatchView: View {
             .frame(height: 30)
             .accessibilityElement(children: .ignore)
         .accessibilityLabel("Color swatch \(label)")
-    }
-}
-
-private struct WarningsView: View {
-    let warnings: [String]
-
-    var body: some View {
-        if !warnings.isEmpty {
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(Array(warnings.prefix(3).enumerated()), id: \.offset) { _, warning in
-                    Label {
-                        Text(warning).font(.system(size: 11.5))
-                    } icon: {
-                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.warning)
-                    }
-                }
-                if warnings.count > 3 {
-                    Text("\(warnings.count - 3) more warnings")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .accessibilityElement(children: .combine)
-        }
     }
 }
 

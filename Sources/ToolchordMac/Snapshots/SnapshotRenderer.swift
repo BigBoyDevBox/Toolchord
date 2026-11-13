@@ -31,6 +31,10 @@ public enum SnapshotRenderer {
         Scenario(name: "search-jwt", appearance: .darkAqua, width: Theme.panelWidth) { session in
             session.attach("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c")
         },
+        Scenario(name: "search-jwt-warnings", appearance: .darkAqua, width: Theme.panelWidth) { session in
+            session.setQuery("jwt")
+            session.attach("Bearer eyJhbGciOiJub25lIn0.eyJleHAiOjAsIm5iZiI6NDEwMjQ0NDgwMH0.")
+        },
         Scenario(name: "search-url", appearance: .aqua, width: Theme.panelWidth) { session in
             session.attach("https://example.test/search?q=tool+chord&lang=en&lang=de&page=2#results")
         },
