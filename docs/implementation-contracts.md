@@ -70,7 +70,7 @@ All calendar math uses exact integers on the proleptic Gregorian calendar for ye
 
 | Commands | Contract |
 | --- | --- |
-| Case conversion and slugs | Per line, preserving each line break. Words split at non-alphanumerics, lower→upper boundaries, and acronym boundaries (`XMLHttpRequest` → XML, Http, Request), never between letters and digits; combining marks stay in their word. Slugs transliterate to ASCII (`Straße` → `strasse`). |
+| Case conversion and slugs | Per line, preserving each line break. Words split at non-alphanumerics, lower→upper boundaries, and acronym boundaries (`XMLHttpRequest` → XML, Http, Request), never between letters and digits; combining marks stay in their word. Title Case and Sentence case preserve prose punctuation and spacing, retain mixed-case words and acronyms in mixed-case lines, and capitalize words or sentence starts respectively. Slugs transliterate to ASCII (`Straße` → `strasse`). |
 | Sort, deduplicate, reverse lines | Split on LF, CR, or CRLF; join with the first break found; keep a trailing break. Sorting is stable, natural-numeric, and optionally case-sensitive; deduplication keeps first occurrences, optionally ignoring case or surrounding spaces. |
 | HTML entities | Escape `& < > " '`. Unescape in one pass: the 253 HTML 4 names plus `&apos;`, decimal and hex references (bounded look-ahead), invalid code points → U+FFFD with a warning, unknown names left unchanged with a warning. |
 | Hashes | SHA-256, SHA-512, SHA-1, MD5 of the UTF-8 bytes as lowercase hex; SHA-1 and MD5 carry a not-collision-resistant warning. |
